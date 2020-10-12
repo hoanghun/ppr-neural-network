@@ -74,7 +74,7 @@ int main() {
 
 	double hidden_layer2_weights[hidden_layer1_size * hidden_layer2_size] = {};
 	std::fill_n(hidden_layer2_weights, hidden_layer1_size * hidden_layer2_size, 1);
-	
+
 	double output_layer_weights[hidden_layer2_size * output_layer_size] = {};
 	std::fill_n(output_layer_weights, hidden_layer2_size * output_layer_size, 1);
 
@@ -95,13 +95,13 @@ void try_iteration(double input[], int input_size, int layer_size, double layer_
 			auto index = j + i * input_size;
 			auto output_of_node = input[j] * layer_weights[index] + layer_biases[i];
 			sum += output_of_node;
-		
+
 		}
 
 		layer_output[i] = sum;
 	}
 
 	for (int i = 0; i < layer_size; i++) {
-		std::cout <<  "output of node i: " << i  << " - "<< layer_output[i] << std::endl;
+		std::cout << "output of node i: " << i << " - " << layer_output[i] << std::endl;
 	}
 }
