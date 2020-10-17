@@ -23,7 +23,7 @@ double Band_Index_To_Level(const size_t index) {
 
 struct measuredvalue {
 	std::string measuredate;
-	double ist;
+	double ist = 0;
 } typedef measuredvalue_t;
 
 
@@ -77,7 +77,6 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 
 bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
 	sqlite3* db;
-	sqlite3_stmt* stmt;
 	const char* query = "SELECT * from measuredvalue";
 	char* zErrMsg = 0;
 	const char* data = "Callback function called";
