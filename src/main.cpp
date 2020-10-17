@@ -2,6 +2,8 @@
 //
 
 #include <iostream>
+#include <vector>
+#include "sqlite/sqlite3.h"
 
 static constexpr double Low_Threshold = 3.0;            //mmol/L below which a medical attention is needed
 static constexpr double High_Threshold = 13.0;          //dtto above
@@ -19,13 +21,16 @@ double Band_Index_To_Level(const size_t index) {
 	return Low_Threshold + static_cast<double>(index - 1) * Band_Size + Half_Band_Size;
 }
 
+struct measuredvalue {
+	std::string measuredate;
+	double ist;
+} typedef measuredvalue_t;
 
 
 double count = 0.0;
 double running_avg = std::numeric_limits<double>::quiet_NaN();
 
 double Update_Average(const double level) {
-
 	if (!std::isnan(level)) {
 		count += 1.0;
 		if (!std::isnan(running_avg)) {
@@ -51,7 +56,61 @@ double risk(const double bg) {
 
 void try_iteration(double input[], int input_size, int layer_size, double layer_biases[], double layer_weights[], double layer_output[]);
 
+static int callback(void* data, int argc, char** argv, char** azColName) {
+	int i;
+	std::vector<measuredvalue_t> * vector = static_cast<std::vector<measuredvalue_t> *>(data);
+	measuredvalue_t value;
+	for (i = 0; i < argc; i++) {
+		if (strcmp(azColName[i], "measuredat") == 0) {
+			value.measuredate = argv[i];
+		}
+		if (strcmp(azColName[i], "ist") == 0) {
+			value.ist = atof(argv[i]);
+		}
+		
+	}
+	vector->push_back(value);
+
+	return 0;
+}
+
+
+bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
+	sqlite3* db;
+	sqlite3_stmt* stmt;
+	const char* query = "SELECT * from measuredvalue";
+	char* zErrMsg = 0;
+	const char* data = "Callback function called";
+
+	int rc = sqlite3_open(dbname, &db);
+	printf("Query: %s\n", query);
+
+	if (rc) {
+		fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+		return false;
+	}
+	else {
+		fprintf(stderr, "Opened database successfully\n");
+	}
+
+	rc = sqlite3_exec(db, query, callback, (void*)vector, &zErrMsg);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "SQL error: %s\n", zErrMsg);
+		sqlite3_free(zErrMsg);
+	}
+	else {
+		fprintf(stdout, "Operation done successfully\n");
+	}
+	sqlite3_close(db);
+
+	return true;
+}
+
 int main() {
+	std::vector<measuredvalue_t> vector;
+	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &vector);
+
 	const int input_layer_size = 2;
 	const int hidden_layer1_size = 3;
 	const int hidden_layer2_size = 3;
@@ -88,7 +147,6 @@ int main() {
 
 
 void try_iteration(double input[], int input_size, int layer_size, double layer_biases[], double layer_weights[], double layer_output[]) {
-
 	for (int i = 0; i < layer_size; i++) {
 		double sum = 0;
 		for (int j = 0; j < input_size; j++) {
