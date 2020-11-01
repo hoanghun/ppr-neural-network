@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <ctime>
 #include "sqlite/sqlite3.h"
 
 static constexpr double Low_Threshold = 3.0;            //mmol/L below which a medical attention is needed
@@ -22,7 +23,7 @@ double Band_Index_To_Level(const size_t index) {
 }
 
 struct measuredvalue {
-	std::tm timestamp = {};
+	std::time_t timestamp = {};
 	double ist = 0;
 } typedef measuredvalue_t;
 
@@ -114,13 +115,13 @@ void Neuron::feed_forward(const Layer& previous_layer) {
 		sum += previous_layer[i].get_output_signal() * previous_layer[i].weights[index].weight;
 	}
 
-	output_signal = sum;//Neuron::activate(sum);
+	output_signal = Neuron::activate(sum);
 }
 
 Neuron::Neuron(unsigned outputs_count, int index) {
 	for (unsigned i = 0; i < outputs_count; i++) {
 		weights.push_back(Connection());
-		weights.back().weight = 1; //randomWeight();
+		weights.back().weight = randomWeight();
 	}
 
 	this->index = index;
@@ -228,9 +229,8 @@ void Neural_Network::feed_forward(const std::vector<double>& input_values) {
 		}
 	}
 
-	double sum = 0.0;
-	Layer& output_layer = layers.back();
-	softmax(output_layer);
+	//Layer& output_layer = layers.back();
+	//softmax(output_layer);
 	// on output layer we'll do softmax
 }
 
@@ -261,13 +261,13 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 		if (strcmp(azColName[i], "measuredat") == 0) {
 			std::tm timestamp = {};
 			int rc = sscanf_s(argv[i], "%d-%d-%dT%d:%d:%f+02:00", &y, &M, &d, &h, &m, &s);
-			timestamp.tm_year = y;
+			timestamp.tm_year = y - 1900;
 			timestamp.tm_mday = d;
 			timestamp.tm_mon = M;
 			timestamp.tm_min = m;
 			timestamp.tm_hour = h;
 			timestamp.tm_sec = (int)s;
-			value.timestamp = timestamp;
+			value.timestamp = std::mktime(&timestamp);
 		}
 		if (strcmp(azColName[i], "ist") == 0) {
 			value.ist = atof(argv[i]);
@@ -312,24 +312,153 @@ bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
 }
 
 int main() {
-	std::vector<measuredvalue_t> vector;
-	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &vector);
+	std::vector<measuredvalue_t> measured_values;
+	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
+
+	double minutes_prediction = 30;
 	std::vector<unsigned> topology;
-	topology.push_back(3);
-	topology.push_back(2);
-	topology.push_back(1);
+	topology.push_back(8);
+	topology.push_back(16);
+	topology.push_back(26);
+	topology.push_back(32);
 
 	Neural_Network neural_network(topology);
-	std::vector<double> input_vals;
-	input_vals.push_back(1);  
-	input_vals.push_back(1);  
-	input_vals.push_back(1);  
-	neural_network.feed_forward(input_vals);
+
+	size_t j = 0;
+	std::vector<measuredvalue_t> input_measured_values(8);
+	std::vector<double> neural_input(8);
+	for (size_t i = 0; i < measured_values.size(); i++) {
+		if (j == 0) {
+			input_measured_values[0] = measured_values[i];
+			j++;
+			continue;
+		}
+
+		if (std::difftime(input_measured_values[j - 1].timestamp, measured_values[i].timestamp) == -300) {
+			input_measured_values[j] = measured_values[i];
+			j++;
+		}
+		else {
+			input_measured_values[0] = measured_values[i];
+			j = 1;
+		}
+		
+		if (j == 8) {
+			j = 0;
+			size_t k = i + 1;
+
+
+			if (k == measured_values.size()) break;
+			double y = -1;
+			while (k != measured_values.size()) {
+				double diff = std::difftime(measured_values[k].timestamp, input_measured_values[7].timestamp);
+
+				if (diff == minutes_prediction * 60) {
+					y = measured_values[k].ist;
+					break;
+				}
+				else if (diff > minutes_prediction * 60) {
+					break;
+				}
+				k++;
+			}
+
+			if (y > 0) {
+				for (size_t index = 0; index < input_measured_values.size(); index++) {
+					neural_input[index] = risk(input_measured_values[index].ist);
+				}
+
+				neural_network.feed_forward(neural_input);
+				printf("Done with one input set.\n");
+			}
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	// XOR TRAINING
+	//std::vector<double> input_vals;
+	//input_vals.push_back(1);  
+	//input_vals.push_back(1);  
+	//input_vals.push_back(1);  
 	//std::vector<double> target_vals;
 	//target_vals.push_back(1);
 	//target_vals.push_back(1);
 	//neural_network.back_propagation(target_vals);
 
-	std::vector<double> result_vals;
-	neural_network.get_results(result_vals);
+	//std::vector<std::pair<std::vector<double>, std::vector<double>>> inputs;
+	//std::vector<double> zerozero;
+	//zerozero.push_back(0);
+	//zerozero.push_back(0);
+
+	//std::vector<double> zeroone;
+	//zeroone.push_back(0);
+	//zeroone.push_back(1);
+
+	//std::vector<double> onezero;
+	//onezero.push_back(1);
+	//onezero.push_back(0);
+
+	//std::vector<double> oneone;
+	//oneone.push_back(1);
+	//oneone.push_back(1);
+
+
+	//std::vector<double> truthy;
+	//truthy.push_back(1);
+	//truthy.push_back(0);
+
+	//std::vector<double> falsy;
+	//falsy.push_back(0);
+	//falsy.push_back(1);
+	//std::pair<std::vector<double>, std::vector<double>> first = std::make_pair(zerozero, falsy);
+	//std::pair<std::vector<double>, std::vector<double>> third = std::make_pair(zeroone, truthy);
+	//std::pair<std::vector<double>, std::vector<double>> second = std::make_pair(onezero, truthy);
+	//std::pair<std::vector<double>, std::vector<double>> fourth = std::make_pair(oneone, falsy);
+
+	//inputs.push_back(first);
+	//inputs.push_back(second);
+	//inputs.push_back(third);
+	//inputs.push_back(fourth);
+
+	//for (int i = 0; i < 5000; i++) {
+	//	for (int j = 0; j < inputs.size(); j++) {
+	//		neural_network.feed_forward(inputs[j].first);
+	//		neural_network.back_propagation(inputs[j].second);
+	//	}
+	//}
+
+	//neural_network.feed_forward(zeroone);
+	//std::vector<double> result_vals;
+	//neural_network.get_results(result_vals);
+
+	//neural_network.feed_forward(oneone);
+	//neural_network.get_results(result_vals);
+
+	//neural_network.feed_forward(zerozero);
+	//neural_network.get_results(result_vals);
+
+	//neural_network.feed_forward(onezero);
+	//neural_network.get_results(result_vals);
 }
