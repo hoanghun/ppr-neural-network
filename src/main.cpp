@@ -101,6 +101,8 @@ bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
 int main() {
 	std::vector<measuredvalue_t> measured_values;
 	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
+	printf("Initializing srand\n");
+	srand(static_cast<unsigned int>(time(NULL)));
 
 	double minutes_prediction = 30;
 	std::vector<double> relative_errors;
@@ -205,5 +207,6 @@ int main() {
 		printf("%f ", relative_errors[i]);
 	}
 
-	printf("%f ", relative_errors.back());
+	printf("%f\n", relative_errors.back());
+	printf("Done.\n");
 }
