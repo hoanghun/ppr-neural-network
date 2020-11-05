@@ -2,12 +2,17 @@
 //
 
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <ctime>
 #include <algorithm>
+#include <codeanalysis\warnings.h>
 
 #include "nnetwork.h"
+#pragma warning( push )
+#pragma warning ( disable : ALL_CODE_ANALYSIS_WARNINGS )
 #include "sqlite/sqlite3.h"
+#pragma warning( pop )
 
 static constexpr double Low_Threshold = 3.0;            //mmol/L below which a medical attention is needed
 static constexpr double High_Threshold = 13.0;          //dtto above
@@ -98,23 +103,17 @@ bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
 	return true;
 }
 
-int main() {
-	std::vector<measuredvalue_t> measured_values;
-	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
-	printf("Initializing srand\n");
-	srand(static_cast<unsigned int>(time(NULL)));
-
-	double minutes_prediction = 30;
+struct Results {
 	std::vector<double> relative_errors;
-	std::vector<unsigned> topology;
-	std::vector<double> results;
-	topology.push_back(8);
-	topology.push_back(16);
-	topology.push_back(26);
-	topology.push_back(32);
+	double mean = 0.0;
+	double std_dev = 0.0;
+};
 
+std::pair<Neural_Network, Results> train_single_network(std::vector<unsigned> topology, const std::vector<measuredvalue_t> &measured_values, double minutes_prediction) {	
 	Neural_Network neural_network(topology);
-
+	std::vector<double> relative_errors;
+	std::vector<double> results;
+	
 	size_t j = 0;
 	std::vector<measuredvalue_t> input_measured_values(8);
 	std::vector<double> neural_input(8);
@@ -173,6 +172,7 @@ int main() {
 				double relative_error = std::abs(x - y) / y;
 
 				relative_errors.push_back(relative_error);
+				neural_network.add_xai_intensity(relative_error);
 
 				printf("Done with one input set with an error %f.\n", relative_error);
 			}
@@ -207,6 +207,42 @@ int main() {
 		printf("%f ", relative_errors[i]);
 	}
 
+
+	Results results_struct;
+	results_struct.mean = mean;
+	results_struct.std_dev = std_dev;
+	results_struct.relative_errors = relative_errors;
+
 	printf("%f\n", relative_errors.back());
-	printf("Done.\n");
+	printf("Done.\n");	
+
+	return std::make_pair(neural_network, results_struct);
+}
+
+int main() {
+	std::vector<measuredvalue_t> measured_values;
+	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
+	printf("Initializing srand\n");
+	srand(static_cast<unsigned int>(time(NULL)));
+
+	double minutes_prediction = 30;
+	std::vector<unsigned> topology{ 8, 16, 26, 32 };
+
+	auto values = train_single_network(topology, measured_values, minutes_prediction);
+
+	Neural_Network& neural_network = values.first;
+
+	std::ifstream infile("neuronka.txt");
+	if (infile.is_open()) {
+		neural_network.load_weights(infile);
+	}
+	infile.close();
+
+	std::ofstream file("neuronka_output.txt");
+	if (file.is_open()) {
+		neural_network.print_neural_network(file);
+	}
+	file.close();
+
+	//neural_network.print_neural_network(std::cout);
 }

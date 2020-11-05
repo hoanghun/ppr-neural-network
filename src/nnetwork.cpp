@@ -1,5 +1,10 @@
 #include "nnetwork.h"
 
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+
 double Neuron::eta = 0.15;
 double Neuron::alpha = 0.5;
 
@@ -40,11 +45,14 @@ double Neuron::derivative(double x) {
 	return 1.0 - tanh(x) * tanh(x);
 }
 
-void Neuron::feed_forward(const Layer& previous_layer) {
+void Neuron::feed_forward(Layer& previous_layer) {
 	double sum = 0.0;
 
 	for (int i = 0; i < previous_layer.size(); i++) {
-		sum += previous_layer[i].get_output_signal() * previous_layer[i].weights[index].weight;
+		double current_intensity = previous_layer[i].get_output_signal() * previous_layer[i].weights[index].weight; 
+		sum += current_intensity;
+		previous_layer[i].weights[index].intensity_counter += current_intensity;
+		previous_layer[i].weights[index].current_intensity = current_intensity;
 	}
 
 	output_signal = Neuron::activate(sum);
@@ -53,7 +61,7 @@ void Neuron::feed_forward(const Layer& previous_layer) {
 Neuron::Neuron(unsigned outputs_count, int index) {
 	for (unsigned i = 0; i < outputs_count; i++) {
 		weights.push_back(Connection());
-		weights.back().weight = randomWeight();
+		weights.back().weight = random_weight();
 	}
 
 	this->index = index;
@@ -163,9 +171,82 @@ Neural_Network::Neural_Network(const std::vector<unsigned>& topology) {
 
 		for (unsigned j = 0; j <= topology[i]; j++) { // <= because of bias node
 			layers.back().push_back(Neuron(outputs_count, j));
-			printf("Made a neuron with index %d\n", j);
 		}
 
 		layers.back().back().set_output_signal(1.0); // bias node
+	}
+}
+void Neuron::set_weight(size_t index, double weight) {
+	if (index < weights.size()) {
+		weights[index].weight = weight;
+	}
+	else {
+		printf("Invalid index %zu\n", index);
+	}
+}
+
+void Neural_Network::print_neural_network(std::ostream &file) {
+	for (size_t layer_index = 0; layer_index < layers.size() - 1; layer_index++) {
+		file << "[hidden_layer_" << layer_index + 1 << "]" << std::endl;
+
+		Layer &layer = layers[layer_index];
+		for (size_t neuron_index = 0; neuron_index < layer.size(); neuron_index++) {
+			const std::vector<Connection>& weights = layer[neuron_index].get_weights();
+			
+
+			for (size_t weight_index = 0; weight_index < weights.size(); weight_index++) {
+				file << "Neuron" << weight_index << "_Weight" << neuron_index  << "=" << weights[weight_index].weight << std::endl;
+			}
+		}
+	}
+}
+
+void Neural_Network::load_weights(std::ifstream& file) {
+	std::string line;
+	size_t layer_index = -1;
+	
+	while (std::getline(file, line)) {
+		if (line.find("[hidden_layer_") != std::string::npos) {
+			layer_index++;
+		}
+		else {
+			size_t weight_index, neuron_index;
+			double weight;
+
+			std::replace_if(line.begin(), line.end(), [](const char& c) { return c != '.' && !std::isdigit(c); }, ' ');
+			std::istringstream iss(line);
+
+			if (!(iss >> weight_index >> neuron_index >> weight)) {
+				printf("");
+			}
+
+			if (layer_index < layers.size() && neuron_index < layers[layer_index].size()) {
+				layers[layer_index][neuron_index].set_weight(weight_index, weight);
+			}
+			else {
+				printf("Invalid indicies layer_index: %zu or neuron_index: %zu\n", layer_index, neuron_index);
+			}
+		}
+	}
+}
+
+void Neuron::add_xai_intensity() {
+	for (size_t weight_index = 0; weight_index < weights.size(); weight_index++) {
+		weights[weight_index].xai_intensity_counter += weights[weight_index].current_intensity;
+	}
+}
+
+void Neural_Network::add_xai_intensity(double error) {
+	if (error <= 0.15) {
+		printf("Error in the limits, adding xai.\n");
+		for (size_t layer_index = 0; layer_index < layers.size(); layer_index++) {
+			Layer& layer = layers[layer_index];
+			for (size_t neuron_index = 0; neuron_index < layer.size(); neuron_index++) {
+				layer[neuron_index].add_xai_intensity();
+			}
+		}
+	}
+	else {
+		printf("Error too big, ignoring..\n");
 	}
 }
