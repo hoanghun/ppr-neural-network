@@ -157,8 +157,8 @@ void Neural_Network::feed_forward(const std::vector<double>& input_values) {
 		}
 	}
 
-	//Layer& output_layer = layers.back();
-	//softmax(output_layer);
+	Layer& output_layer = layers.back();
+	softmax(output_layer);
 	// on output layer we'll do softmax
 }
 
@@ -238,15 +238,11 @@ void Neuron::add_xai_intensity() {
 
 void Neural_Network::add_xai_intensity(double error) {
 	if (error <= 0.15) {
-		printf("Error in the limits, adding xai.\n");
 		for (size_t layer_index = 0; layer_index < layers.size(); layer_index++) {
 			Layer& layer = layers[layer_index];
 			for (size_t neuron_index = 0; neuron_index < layer.size(); neuron_index++) {
 				layer[neuron_index].add_xai_intensity();
 			}
 		}
-	}
-	else {
-		printf("Error too big, ignoring..\n");
 	}
 }

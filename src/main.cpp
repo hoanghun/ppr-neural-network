@@ -109,8 +109,7 @@ struct Results {
 	double std_dev = 0.0;
 };
 
-std::pair<Neural_Network, Results> train_single_network(std::vector<unsigned> topology, const std::vector<measuredvalue_t> &measured_values, double minutes_prediction) {	
-	Neural_Network neural_network(topology);
+ void train_single_network(Neural_Network &neural_network, Results &results_struct, const std::vector<measuredvalue_t>& measured_values, double minutes_prediction) {
 	std::vector<double> relative_errors;
 	std::vector<double> results;
 	
@@ -173,8 +172,6 @@ std::pair<Neural_Network, Results> train_single_network(std::vector<unsigned> to
 
 				relative_errors.push_back(relative_error);
 				neural_network.add_xai_intensity(relative_error);
-
-				printf("Done with one input set with an error %f.\n", relative_error);
 			}
 		}
 	}
@@ -207,16 +204,12 @@ std::pair<Neural_Network, Results> train_single_network(std::vector<unsigned> to
 		printf("%f ", relative_errors[i]);
 	}
 
-
-	Results results_struct;
 	results_struct.mean = mean;
 	results_struct.std_dev = std_dev;
 	results_struct.relative_errors = relative_errors;
 
 	printf("%f\n", relative_errors.back());
 	printf("Done.\n");	
-
-	return std::make_pair(neural_network, results_struct);
 }
 
 int main() {
@@ -228,21 +221,32 @@ int main() {
 	double minutes_prediction = 30;
 	std::vector<unsigned> topology{ 8, 16, 26, 32 };
 
-	auto values = train_single_network(topology, measured_values, minutes_prediction);
-
-	Neural_Network& neural_network = values.first;
-
-	std::ifstream infile("neuronka.txt");
-	if (infile.is_open()) {
-		neural_network.load_weights(infile);
+	
+	std::vector<std::pair<Neural_Network, Results>> training;
+	for (size_t i = 0; i < 10; i++) {
+		Neural_Network nn(topology);
+		Results results;
+		training.push_back(std::make_pair(nn, results));
 	}
-	infile.close();
 
-	std::ofstream file("neuronka_output.txt");
-	if (file.is_open()) {
-		neural_network.print_neural_network(file);
+	for (size_t i = 0; i < training.size(); i++) {
+		train_single_network(training[i].first, training[i].second, measured_values, minutes_prediction);
 	}
-	file.close();
+
+	printf("cus");
+	//Neural_Network& neural_network = values.first;
+
+	//std::ifstream infile("neuronka.txt");
+	//if (infile.is_open()) {
+	//	neural_network.load_weights(infile);
+	//}
+	//infile.close();
+
+	//std::ofstream file("neuronka_output.txt");
+	//if (file.is_open()) {
+	//	neural_network.print_neural_network(file);
+	//}
+	//file.close();
 
 	//neural_network.print_neural_network(std::cout);
 }
