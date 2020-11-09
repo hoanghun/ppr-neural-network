@@ -137,8 +137,9 @@ struct Results {
 	std::vector<double> relative_errors;
 	std::vector<double> results;
 	double sum = 0;
-	size_t j = 0;
+	size_t j = 1;
 	int counter = 0;
+
 	std::vector<measuredvalue_t> input_measured_values(Inner_Layer_Count);
 	std::vector<double> neural_input(Inner_Layer_Count);
 	measuredvalue_t default_value = {};
@@ -205,6 +206,7 @@ struct Results {
 				neural_network.back_propagation(expected_result_output);
 			}
 
+			// removing first by shifting the vector by one to the left
 			j--;
 			for (size_t ind = 0; ind < Inner_Layer_Count - 1; ind++) {
 				input_measured_values[ind] = input_measured_values[ind + 1];
@@ -234,13 +236,16 @@ int main() {
 
 	double minutes_prediction = 30;
 	std::vector<unsigned> topology{ 8, 16, 26, 32 };
+	size_t training_count = 2;
 	
 	std::vector<std::pair<Neural_Network, Results>> training;
-	for (size_t i = 0; i < 1000; i++) {
+	for (size_t i = 0; i < training_count; i++) {
 		Neural_Network nn(topology);
 		Results results;
 		training.push_back(std::make_pair(nn, results));
 	}
+
+	std::cout << "Set of " << training_count << " neural networks." << std::endl;
 
 	//auto start = std::chrono::high_resolution_clock::now();
 
