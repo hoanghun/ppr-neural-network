@@ -199,6 +199,8 @@ void Neural_Network::print_neural_network(std::ostream &file) {
 			}
 		}
 	}
+
+	std::cout << "Finished outputing neural network" << std::endl;
 }
 
 void Neural_Network::load_weights(std::ifstream& file) {
@@ -217,7 +219,7 @@ void Neural_Network::load_weights(std::ifstream& file) {
 			std::istringstream iss(line);
 
 			if (!(iss >> weight_index >> neuron_index >> weight)) {
-				printf("");
+				printf("Error in string stream.");
 			}
 
 			if (layer_index < layers.size() && neuron_index < layers[layer_index].size()) {

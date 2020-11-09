@@ -22,6 +22,7 @@ static constexpr double Inv_Band_Size = 1.0 / Band_Size;        //abs(Low_Thresh
 static constexpr double Half_Band_Size = 0.5 / Inv_Band_Size;
 static constexpr size_t Band_Count = Internal_Bound_Count + 2;
 static constexpr size_t Output_Layer_Count = 32;
+static constexpr size_t Inner_Layer_Count = 8;
 
 double band_Index_To_Level(const size_t index) {
 	if (index == 0) return Low_Threshold - Half_Band_Size;
@@ -79,7 +80,7 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 			int rc = sscanf_s(argv[i], "%d-%d-%dT%d:%d:%f+02:00", &y, &M, &d, &h, &m, &s);
 			timestamp.tm_year = y - 1900;
 			timestamp.tm_mday = d;
-			timestamp.tm_mon = M;
+			timestamp.tm_mon = M - 1;
 			timestamp.tm_min = m;
 			timestamp.tm_hour = h;
 			timestamp.tm_sec = (int)s;
@@ -98,7 +99,7 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 
 bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
 	sqlite3* db;
-	const char* query = "SELECT * from measuredvalue order by measuredat";
+	const char* query = "SELECT * from measuredvalue";
 	char* zErrMsg = 0;
 
 	int rc = sqlite3_open(dbname, &db);
@@ -137,17 +138,14 @@ struct Results {
 	std::vector<double> results;
 	double sum = 0;
 	size_t j = 0;
-	std::vector<measuredvalue_t> input_measured_values(8);
-	std::vector<double> neural_input(8);
+	int counter = 0;
+	std::vector<measuredvalue_t> input_measured_values(Inner_Layer_Count);
+	std::vector<double> neural_input(Inner_Layer_Count);
+	measuredvalue_t default_value = {};
+	input_measured_values[0] = measured_values[0];
 	
-	for (size_t i = 0; i < measured_values.size(); i++) {
-		if (j == 0) {
-			input_measured_values[0] = measured_values[i];
-			j++;
-			continue;
-		}
-
-		if (std::difftime(input_measured_values[j - 1].timestamp, measured_values[i].timestamp) == -300) {
+	for (size_t i = 1; i < measured_values.size(); i++) {
+		if (std::difftime(measured_values[i].timestamp, input_measured_values[j - 1].timestamp) == 300) {
 			input_measured_values[j] = measured_values[i];
 			j++;
 		}
@@ -156,16 +154,16 @@ struct Results {
 			j = 1;
 		}
 		
-		if (j == 8) {
-			j = 0;
+		if (j >= Inner_Layer_Count) {
 			size_t k = i + 1;
 
+			if (k == measured_values.size()) {
+				break;
+			}
 
-			if (k == measured_values.size()) break;
 			double y = -1;
 			while (k != measured_values.size()) {
-				double diff = std::difftime(measured_values[k].timestamp, input_measured_values[7].timestamp);
-
+				double diff = std::difftime(measured_values[k].timestamp, input_measured_values[Inner_Layer_Count - 1].timestamp);
 				if (diff == minutes_prediction * 60) {
 					y = measured_values[k].ist;
 					break;
@@ -180,6 +178,8 @@ struct Results {
 				for (size_t index = 0; index < input_measured_values.size(); index++) {
 					neural_input[index] = risk(input_measured_values[index].ist);
 				}
+
+				counter++;
 
 				neural_network.feed_forward(neural_input);
 				neural_network.get_results(results);
@@ -203,44 +203,27 @@ struct Results {
 				relative_errors.push_back(relative_error);
 				neural_network.add_xai_intensity(relative_error);
 				neural_network.back_propagation(expected_result_output);
-				//printf("Done set with error %f. Expected %f but got %f\n", relative_error, y, x);
 			}
+
+			j--;
+			for (size_t ind = 0; ind < Inner_Layer_Count - 1; ind++) {
+				input_measured_values[ind] = input_measured_values[ind + 1];
+			}
+			input_measured_values[Inner_Layer_Count - 1] = default_value;
 		}
 	}
+
+	//printf("Counter %d\n", counter);
 
 	if (relative_errors.size() == 0) {
 		printf("No training done.\n");
 		return;
 	}
 
-	//std::sort(relative_errors.begin(), relative_errors.end());
-
 	double mean = sum / relative_errors.size();
-
-	//double std_dev_sum = 0;
-	//for (size_t i = 0; i < relative_errors.size(); i++) {
-	//	std_dev_sum += (relative_errors[i] - mean) * (relative_errors[i] - mean);
-	//}
-
-	//double std_dev = std_dev_sum / relative_errors.size();
-
-	//size_t step = relative_errors.size() / 100;
-
-	//printf("Mean of relative errors is %f and standard deviation is %f\n", mean, std_dev);
-	printf("Mean of relative errors is %f\n", mean);
-
-	//size_t i = 0;
-	//printf("Printing cummulation function:\n");
-
-	//for (i; i < relative_errors.size() - 1; i += step) {
-	//	printf("%f ", relative_errors[i]);
-	//}
-	//printf("%f\n", relative_errors.back());
 
 	results_struct.mean = mean;
 	results_struct.relative_errors = relative_errors;
-
-	//printf("Done.\n");	
 }
 
 int main() {
@@ -251,7 +234,6 @@ int main() {
 
 	double minutes_prediction = 30;
 	std::vector<unsigned> topology{ 8, 16, 26, 32 };
-
 	
 	std::vector<std::pair<Neural_Network, Results>> training;
 	for (size_t i = 0; i < 1000; i++) {
@@ -260,39 +242,64 @@ int main() {
 		training.push_back(std::make_pair(nn, results));
 	}
 
+	//auto start = std::chrono::high_resolution_clock::now();
+
+	//for (size_t i = 0; i < training.size(); i++) {
+	//	train_single_network(training[i].first, training[i].second, measured_values, minutes_prediction);
+	//}
+	//auto stop = std::chrono::high_resolution_clock::now();
+	//auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	//std::cout << "Duration for sequential in milliseconds: " << duration.count() << std::endl;
+
 	auto start = std::chrono::high_resolution_clock::now();
-
-	for (size_t i = 0; i < training.size(); i++) {
-		train_single_network(training[i].first, training[i].second, measured_values, minutes_prediction);
-	}
-	auto stop = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for sequential in milliseconds: " << duration.count() << std::endl;
-
-	start = std::chrono::high_resolution_clock::now();
 	std::for_each(std::execution::par, training.begin(), training.end(),
 		[&measured_values, minutes_prediction](std::pair<Neural_Network, Results>& pair) {
 			train_single_network(pair.first, pair.second, measured_values, minutes_prediction);
 		}
 	);
-	stop = std::chrono::high_resolution_clock::now();
-	duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
 	std::cout << "Duration for parallel in milliseconds: " << duration.count() << std::endl;
 
+	auto lowest_mean = std::min_element(std::begin(training), std::end(training), [](const std::pair<Neural_Network, Results> &lhs, const std::pair<Neural_Network, Results> &rhs) {
+		return lhs.second.mean < rhs.second.mean;
+		}
+	);
 
-	//Neural_Network& neural_network = values.first;
+	auto &results = (*lowest_mean).second;
+	auto mean = results.mean;
+	auto &relative_errors = results.relative_errors;
+	std::sort(relative_errors.begin(), relative_errors.end());
 
-	//std::ifstream infile("neuronka.txt");
+	double std_dev_sum = 0;
+	for (size_t i = 0; i < relative_errors.size(); i++) {
+		std_dev_sum += (relative_errors[i] - mean) * (relative_errors[i] - mean);
+	}
+
+	double std_dev = std_dev_sum / relative_errors.size();
+
+	size_t step = relative_errors.size() / 100;
+
+	printf("Mean of relative errors is %f and standard deviation is %f\n", mean, std_dev);
+	printf("Printing cummulation function:\n");
+	for (size_t i = 0; i < relative_errors.size() - 1; i += step) {
+		printf("%f ", relative_errors[i]);
+	}
+	printf("%f\n", relative_errors.back());
+
+	Neural_Network &neural_network = (*lowest_mean).first;
+
+	std::ofstream file("neural.ini");
+	if (file.is_open()) {
+		neural_network.print_neural_network(file);
+	}
+	file.close();
+
+	//std::ifstream infile("neural.ini");
 	//if (infile.is_open()) {
 	//	neural_network.load_weights(infile);
 	//}
 	//infile.close();
-
-	//std::ofstream file("neuronka_output.txt");
-	//if (file.is_open()) {
-	//	neural_network.print_neural_network(file);
-	//}
-	//file.close();
 
 	//neural_network.print_neural_network(std::cout);
 }
