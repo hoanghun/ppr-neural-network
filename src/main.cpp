@@ -6,28 +6,52 @@
 #include <vector>
 #include <ctime>
 #include <algorithm>
+#include <chrono>
+#include <execution>
 #include <codeanalysis\warnings.h>
 
 #include "nnetwork.h"
-#pragma warning( push )
-#pragma warning ( disable : ALL_CODE_ANALYSIS_WARNINGS )
 #include "sqlite/sqlite3.h"
-#pragma warning( pop )
 
 static constexpr double Low_Threshold = 3.0;            //mmol/L below which a medical attention is needed
 static constexpr double High_Threshold = 13.0;          //dtto above
-static constexpr size_t Internal_Bound_Count = 32;      //number of bounds inside the thresholds
+static constexpr size_t Internal_Bound_Count = 30;      //number of bounds inside the thresholds
 
 static constexpr double Band_Size = (High_Threshold - Low_Threshold) / static_cast<double>(Internal_Bound_Count);                        //must imply relative error <= 10%
 static constexpr double Inv_Band_Size = 1.0 / Band_Size;        //abs(Low_Threshold-Band_Size)/Low_Threshold
 static constexpr double Half_Band_Size = 0.5 / Inv_Band_Size;
 static constexpr size_t Band_Count = Internal_Bound_Count + 2;
+static constexpr size_t Output_Layer_Count = 32;
 
-double Band_Index_To_Level(const size_t index) {
+double band_Index_To_Level(const size_t index) {
 	if (index == 0) return Low_Threshold - Half_Band_Size;
 	if (index >= Band_Count - 1) return High_Threshold + Half_Band_Size;
 
 	return Low_Threshold + static_cast<double>(index - 1) * Band_Size + Half_Band_Size;
+}
+
+size_t band_Level_To_Index(double expected_value) {
+	if (expected_value <= Low_Threshold) {
+		return 0;
+	}
+
+	if (expected_value >= High_Threshold) {
+		return Output_Layer_Count - 1;
+	}
+
+	int i;
+	double interval_ceiling = Low_Threshold;
+
+	for (i = 1; i <= Internal_Bound_Count; i++) {
+
+		interval_ceiling += Band_Size;
+
+		if (interval_ceiling > expected_value) {
+			return i;
+		}
+	}
+
+	return Output_Layer_Count - 1;
 }
 
 struct measuredvalue {
@@ -76,27 +100,26 @@ bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
 	sqlite3* db;
 	const char* query = "SELECT * from measuredvalue order by measuredat";
 	char* zErrMsg = 0;
-	const char* data = "Callback function called";
 
 	int rc = sqlite3_open(dbname, &db);
 	printf("Query: %s\n", query);
 
 	if (rc) {
-		fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+		fprintf(stderr, "Can't open database: %s.\n", sqlite3_errmsg(db));
 		return false;
 	}
 	else {
-		fprintf(stderr, "Opened database successfully\n");
+		fprintf(stderr, "Opened database successfully.\n");
 	}
 
 	rc = sqlite3_exec(db, query, callback, (void*)vector, &zErrMsg);
 
 	if (rc != SQLITE_OK) {
-		fprintf(stderr, "SQL error: %s\n", zErrMsg);
+		fprintf(stderr, "SQL error: %s.\n", zErrMsg);
 		sqlite3_free(zErrMsg);
 	}
 	else {
-		fprintf(stdout, "Operation done successfully\n");
+		fprintf(stdout, "Operation done successfully.\n");
 	}
 	sqlite3_close(db);
 
@@ -112,10 +135,11 @@ struct Results {
  void train_single_network(Neural_Network &neural_network, Results &results_struct, const std::vector<measuredvalue_t>& measured_values, double minutes_prediction) {
 	std::vector<double> relative_errors;
 	std::vector<double> results;
-	
+	double sum = 0;
 	size_t j = 0;
 	std::vector<measuredvalue_t> input_measured_values(8);
 	std::vector<double> neural_input(8);
+	
 	for (size_t i = 0; i < measured_values.size(); i++) {
 		if (j == 0) {
 			input_measured_values[0] = measured_values[i];
@@ -167,55 +191,62 @@ struct Results {
 					}
 				}
 
-				double x = Band_Index_To_Level(output_index);
+				double x = band_Index_To_Level(output_index);
 				double relative_error = std::abs(x - y) / y;
+				sum += relative_error;
+
+				std::vector<double> expected_result_output(Output_Layer_Count, 0.0);
+				size_t index = band_Level_To_Index(y);
+
+				expected_result_output[index] = 1;
 
 				relative_errors.push_back(relative_error);
 				neural_network.add_xai_intensity(relative_error);
+				neural_network.back_propagation(expected_result_output);
+				//printf("Done set with error %f. Expected %f but got %f\n", relative_error, y, x);
 			}
 		}
 	}
 
-	std::sort(relative_errors.begin(), relative_errors.end());
-
-	double sum = 0;
-	
-	for (size_t i = 0; i < relative_errors.size(); i++) {
-		sum += relative_errors[i];
+	if (relative_errors.size() == 0) {
+		printf("No training done.\n");
+		return;
 	}
+
+	//std::sort(relative_errors.begin(), relative_errors.end());
 
 	double mean = sum / relative_errors.size();
 
-	double std_dev_sum = 0;
-	for (size_t i = 0; i < relative_errors.size(); i++) {
-		std_dev_sum += (relative_errors[i] - mean) * (relative_errors[i] - mean);
-	}
+	//double std_dev_sum = 0;
+	//for (size_t i = 0; i < relative_errors.size(); i++) {
+	//	std_dev_sum += (relative_errors[i] - mean) * (relative_errors[i] - mean);
+	//}
 
-	double std_dev = std_dev_sum / relative_errors.size();
+	//double std_dev = std_dev_sum / relative_errors.size();
 
-	size_t step = relative_errors.size() / 100;
+	//size_t step = relative_errors.size() / 100;
 
-	printf("Mean of relative errors is %f and standard deviation is %f\n", mean, std_dev);
+	//printf("Mean of relative errors is %f and standard deviation is %f\n", mean, std_dev);
+	printf("Mean of relative errors is %f\n", mean);
 
-	size_t i = 0;
-	printf("Printing cummulation function:\n");
+	//size_t i = 0;
+	//printf("Printing cummulation function:\n");
 
-	for (i; i < relative_errors.size() - 1; i += step) {
-		printf("%f ", relative_errors[i]);
-	}
+	//for (i; i < relative_errors.size() - 1; i += step) {
+	//	printf("%f ", relative_errors[i]);
+	//}
+	//printf("%f\n", relative_errors.back());
 
 	results_struct.mean = mean;
-	results_struct.std_dev = std_dev;
 	results_struct.relative_errors = relative_errors;
 
-	printf("%f\n", relative_errors.back());
-	printf("Done.\n");	
+	//printf("Done.\n");	
 }
 
 int main() {
 	std::vector<measuredvalue_t> measured_values;
 	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
-	printf("Initializing srand\n");
+	printf("Initializing srand.\n");
 	srand(static_cast<unsigned int>(time(NULL)));
 
 	double minutes_prediction = 30;
@@ -223,17 +254,32 @@ int main() {
 
 	
 	std::vector<std::pair<Neural_Network, Results>> training;
-	for (size_t i = 0; i < 10; i++) {
+	for (size_t i = 0; i < 1000; i++) {
 		Neural_Network nn(topology);
 		Results results;
 		training.push_back(std::make_pair(nn, results));
 	}
 
+	auto start = std::chrono::high_resolution_clock::now();
+
 	for (size_t i = 0; i < training.size(); i++) {
 		train_single_network(training[i].first, training[i].second, measured_values, minutes_prediction);
 	}
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	std::cout << "Duration for sequential in milliseconds: " << duration.count() << std::endl;
 
-	printf("cus");
+	start = std::chrono::high_resolution_clock::now();
+	std::for_each(std::execution::par, training.begin(), training.end(),
+		[&measured_values, minutes_prediction](std::pair<Neural_Network, Results>& pair) {
+			train_single_network(pair.first, pair.second, measured_values, minutes_prediction);
+		}
+	);
+	stop = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	std::cout << "Duration for parallel in milliseconds: " << duration.count() << std::endl;
+
+
 	//Neural_Network& neural_network = values.first;
 
 	//std::ifstream infile("neuronka.txt");

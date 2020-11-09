@@ -157,8 +157,8 @@ void Neural_Network::feed_forward(const std::vector<double>& input_values) {
 		}
 	}
 
-	Layer& output_layer = layers.back();
-	softmax(output_layer);
+	//Layer& output_layer = layers.back();
+	//softmax(output_layer);
 	// on output layer we'll do softmax
 }
 
