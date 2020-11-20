@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <chrono>
 #include <execution>
-#include <codeanalysis\warnings.h>
 
 #include "nnetwork.h"
 #include "sqlite/sqlite3.h"
@@ -24,14 +23,14 @@ static constexpr size_t Band_Count = Internal_Bound_Count + 2;
 static constexpr size_t Output_Layer_Count = 32;
 static constexpr size_t Inner_Layer_Count = 8;
 
-double band_Index_To_Level(const size_t index) {
+double band_index_to_level(const size_t index) {
 	if (index == 0) return Low_Threshold - Half_Band_Size;
 	if (index >= Band_Count - 1) return High_Threshold + Half_Band_Size;
 
 	return Low_Threshold + static_cast<double>(index - 1) * Band_Size + Half_Band_Size;
 }
 
-size_t band_Level_To_Index(double expected_value) {
+size_t band_level_to_index(double expected_value) {
 	if (expected_value <= Low_Threshold) {
 		return 0;
 	}
@@ -133,16 +132,18 @@ struct Results {
 	double std_dev = 0.0;
 };
 
- void train_single_network(Neural_Network &neural_network, Results &results_struct, const std::vector<measuredvalue_t>& measured_values, double minutes_prediction) {
-	std::vector<double> relative_errors;
-	std::vector<double> results;
-	double sum = 0;
-	size_t j = 1;
-	int counter = 0;
+struct training_input_t {
+	std::vector<double> input;
+	double desired_value = 0;
+};
 
+ void create_training_set(const std::vector<measuredvalue_t>& measured_values, double minutes_prediction, std::vector<training_input_t>& training_set) {
 	std::vector<measuredvalue_t> input_measured_values(Inner_Layer_Count);
 	std::vector<double> neural_input(Inner_Layer_Count);
 	measuredvalue_t default_value = {};
+
+	// initialization
+	size_t j = 1;
 	input_measured_values[0] = measured_values[0];
 	
 	for (size_t i = 1; i < measured_values.size(); i++) {
@@ -176,34 +177,14 @@ struct Results {
 			}
 
 			if (y > 0) {
+				training_input_t single_input;
+				single_input.desired_value = y;
+
 				for (size_t index = 0; index < input_measured_values.size(); index++) {
-					neural_input[index] = risk(input_measured_values[index].ist);
+					single_input.input.push_back(risk(input_measured_values[index].ist));
 				}
 
-				counter++;
-
-				neural_network.feed_forward(neural_input);
-				neural_network.get_results(results);
-
-				size_t output_index = 0;
-				for (size_t index = 1; index < results.size(); index++) {
-					if (results[index] > results[output_index]) {
-						output_index = index;
-					}
-				}
-
-				double x = band_Index_To_Level(output_index);
-				double relative_error = std::abs(x - y) / y;
-				sum += relative_error;
-
-				std::vector<double> expected_result_output(Output_Layer_Count, 0.0);
-				size_t index = band_Level_To_Index(y);
-
-				expected_result_output[index] = 1;
-
-				relative_errors.push_back(relative_error);
-				neural_network.add_xai_intensity(relative_error);
-				neural_network.back_propagation(expected_result_output);
+				training_set.push_back(single_input);
 			}
 
 			// removing first by shifting the vector by one to the left
@@ -214,15 +195,46 @@ struct Results {
 			input_measured_values[Inner_Layer_Count - 1] = default_value;
 		}
 	}
+}
 
-	//printf("Counter %d\n", counter);
+ void train_single_network(Neural_Network& neural_network, Results& results_struct, const std::vector<training_input_t>& training_set) {
+	std::vector<double> relative_errors;
+	std::vector<double> results;
+	double relative_errors_sum = 0;
+
+	// initialization
+	
+	for (auto const& sample : training_set) {
+		neural_network.feed_forward(sample.input);
+		neural_network.get_results(results);
+
+		size_t output_index = 0;
+		for (size_t index = 1; index < results.size(); index++) {
+			if (results[index] > results[output_index]) {
+				output_index = index;
+			}
+		}
+
+		double x = band_index_to_level(output_index);
+		double relative_error = std::abs(x - sample.desired_value) / sample.desired_value;
+		relative_errors_sum += relative_error;
+
+		std::vector<double> expected_result_output(Output_Layer_Count, 0.0);
+		size_t index = band_level_to_index(sample.desired_value);
+
+		expected_result_output[index] = 1;
+		relative_errors.push_back(relative_error);
+		neural_network.add_xai_intensity(relative_error);
+		neural_network.back_propagation(expected_result_output);
+	}
+
 
 	if (relative_errors.size() == 0) {
 		printf("No training done.\n");
 		return;
 	}
 
-	double mean = sum / relative_errors.size();
+	double mean = relative_errors_sum / relative_errors.size();
 
 	results_struct.mean = mean;
 	results_struct.relative_errors = relative_errors;
@@ -235,8 +247,11 @@ int main() {
 	srand(static_cast<unsigned int>(time(NULL)));
 
 	double minutes_prediction = 30;
+	std::vector<training_input_t> training_set;
+	create_training_set(measured_values, minutes_prediction, training_set);
+
 	std::vector<unsigned> topology{ 8, 16, 26, 32 };
-	size_t training_count = 2;
+	size_t training_count = 10;
 	
 	std::vector<std::pair<Neural_Network, Results>> training;
 	for (size_t i = 0; i < training_count; i++) {
@@ -245,7 +260,7 @@ int main() {
 		training.push_back(std::make_pair(nn, results));
 	}
 
-	std::cout << "Set of " << training_count << " neural networks." << std::endl;
+	//std::cout << "Set of " << training_count << " neural networks." << std::endl;
 
 	//auto start = std::chrono::high_resolution_clock::now();
 
@@ -258,8 +273,8 @@ int main() {
 
 	auto start = std::chrono::high_resolution_clock::now();
 	std::for_each(std::execution::par, training.begin(), training.end(),
-		[&measured_values, minutes_prediction](std::pair<Neural_Network, Results>& pair) {
-			train_single_network(pair.first, pair.second, measured_values, minutes_prediction);
+		[&training_set](std::pair<Neural_Network, Results>& pair) {
+			train_single_network(pair.first, pair.second, training_set);
 		}
 	);
 	auto stop = std::chrono::high_resolution_clock::now();
@@ -281,7 +296,7 @@ int main() {
 		std_dev_sum += (relative_errors[i] - mean) * (relative_errors[i] - mean);
 	}
 
-	double std_dev = std_dev_sum / relative_errors.size();
+	double std_dev = std::sqrt(std_dev_sum / relative_errors.size());
 
 	size_t step = relative_errors.size() / 100;
 
