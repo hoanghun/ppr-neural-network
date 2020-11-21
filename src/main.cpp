@@ -272,7 +272,7 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<tra
 	);
 	auto stop = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for parallel in milliseconds: " << duration.count() << std::endl;
+	std::cout << "Duration for PSTL in milliseconds: " << duration.count() << std::endl << std::endl;
 
 	auto lowest_mean = std::min_element(std::begin(training), std::end(training), [](const std::pair<Neural_Network, Results> &lhs, const std::pair<Neural_Network, Results> &rhs) {
 		return lhs.second.mean < rhs.second.mean;
@@ -282,6 +282,7 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<tra
 	auto &results = (*lowest_mean).second;
 	auto mean = results.mean;
 	auto &relative_errors = results.relative_errors;
+	process_relative_errors(relative_errors);
 
 	const Neural_Network &neural_network = (*lowest_mean).first;
 
@@ -329,7 +330,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<t
 
 	auto stop = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for sequential in milliseconds: " << duration.count() << std::endl;
+	std::cout << "Duration for OPENCL in milliseconds: " << duration.count() << std::endl << std::endl;
 
 	auto relative_errors = networks.get_errors();
 	process_relative_errors(relative_errors);
@@ -346,8 +347,9 @@ int main() {
 	create_training_set(measured_values, minutes_prediction, training_set);
 
 	std::vector<size_t> topology{ 8, 16, 26, 32 };
-	size_t training_count = 10;
+	size_t training_count = 100;
 
+	std::cout << "Training size: " << training_set.size() << std::endl;
 	std::vector<std::pair<Neural_Network, Results>> training;
 	for (size_t i = 0; i < training_count; i++) {
 		Neural_Network nn(topology);
@@ -355,6 +357,6 @@ int main() {
 		training.push_back(std::make_pair(nn, results));
 	}
 
-	run_opencl_version(topology, training_set, training_count);
-	//run_pstl_version(topology, training_set, training);
+	//run_opencl_version(topology, training_set, training_count);
+	run_pstl_version(topology, training_set, training);
 }
