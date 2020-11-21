@@ -1,6 +1,4 @@
-// PPR.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
-
+#include <CL/cl.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
