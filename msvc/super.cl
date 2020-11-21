@@ -7,8 +7,11 @@ __kernel void FeedForward(__global double* input, __global double* weights, __gl
 	int offset = previous_layer_id * layer_size + layer_id;
 
 	double weight = weights[neural_network_offset + offset];
+	//printf("WEIGHt %f\n", weight);
 	double input_val = input[neural_network_id * previous_layer_size + previous_layer_id];
 
+	//printf("input %f\n", input_val);
+	//printf("layer_outputs %f\n", layer_outputs[neural_network_offset + offset]);
 	layer_outputs[neural_network_offset + offset] = weight * input_val;
 }
 
@@ -61,5 +64,7 @@ __kernel void CalculateErrors(__global double *outputs, __global double* errors,
 		}
 	}
 	double x = band_index_to_level(highest);
-	errors[neural_network_id] = fabs(x - measured_value) / measured_value;
+	double error = fabs(x - measured_value) / measured_value;
+	//printf("Neural network id: %d, Got %f, wanted %f, error is %f\n", neural_network_id, x, measured_value, error);
+	errors[neural_network_id] = error;
 }

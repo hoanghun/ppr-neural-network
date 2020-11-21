@@ -58,8 +58,8 @@ void Neuron::feed_forward(Layer& previous_layer) {
 	output_signal = Neuron::activate(sum);
 }
 
-Neuron::Neuron(unsigned outputs_count, int index) {
-	for (unsigned i = 0; i < outputs_count; i++) {
+Neuron::Neuron(size_t outputs_count, size_t index) {
+	for (size_t i = 0; i < outputs_count; i++) {
 		weights.push_back(Connection());
 		weights.back().weight = random_weight();
 	}
@@ -167,9 +167,9 @@ Neural_Network::Neural_Network(const std::vector<size_t>& topology) {
 
 	for (size_t i = 0; i < number_of_layers; i++) {
 		layers.push_back(Layer());
-		unsigned outputs_count = i == number_of_layers - 1 ? 0 : topology[i + 1];
+		size_t outputs_count = i == number_of_layers - 1 ? 0 : topology[i + 1];
 
-		for (unsigned j = 0; j <= topology[i]; j++) { // <= because of bias node
+		for (size_t j = 0; j <= topology[i]; j++) { // <= because of bias node
 			layers.back().push_back(Neuron(outputs_count, j));
 		}
 
@@ -185,11 +185,11 @@ void Neuron::set_weight(size_t index, double weight) {
 	}
 }
 
-void Neural_Network::print_neural_network(std::ostream &file) {
+void Neural_Network::print_neural_network(std::ostream &file) const {
 	for (size_t layer_index = 0; layer_index < layers.size() - 1; layer_index++) {
 		file << "[hidden_layer_" << layer_index + 1 << "]" << std::endl;
 
-		Layer &layer = layers[layer_index];
+		const Layer &layer = layers[layer_index];
 		for (size_t neuron_index = 0; neuron_index < layer.size(); neuron_index++) {
 			const std::vector<Connection>& weights = layer[neuron_index].get_weights();
 			

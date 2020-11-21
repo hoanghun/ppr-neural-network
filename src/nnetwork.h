@@ -16,7 +16,7 @@ struct Connection {
 
 class Neuron {
 public:
-	Neuron(unsigned outputs_count, int index);
+	Neuron(size_t outputs_count, size_t index);
 	void set_output_signal(double val) { output_signal = val; }
 	double get_output_signal() const { return output_signal; }
 	void feed_forward(Layer& previous_layer);
@@ -35,7 +35,7 @@ private:
 	double output_signal;
 	double sumDOW(const Layer& next_layer) const;
 	double gradient;
-	int index;
+	size_t index;
 
 	static double random_weight() { return rand() / double(RAND_MAX); }
 
@@ -48,7 +48,7 @@ public:
 	void feed_forward(const std::vector<double>& input_vals);
 	void back_propagation(const std::vector<double>& target_vals);
 	void get_results(std::vector<double>& result_vals);
-	void print_neural_network(std::ostream &file);
+	void print_neural_network(std::ostream &file) const;
 	void load_weights(std::ifstream& file);
 	void add_xai_intensity(double error);
 private:

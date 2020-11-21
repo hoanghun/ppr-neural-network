@@ -1,22 +1,20 @@
+#include <iostream>
+#include <algorithm>
+#include <limits>
+
 #include "opencl_neural_network.h"
 
+cl_int opencl_feed_forward(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer, cl::Buffer& previous_layer_weights, cl::Buffer& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size);
+cl_int opencl_feed_forward_sum_synapses(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer_synapses_output, cl::Buffer& layer_biases, cl::Buffer& layer_output, size_t previous_layer_size, size_t layer_size, size_t neural_network_count);
+cl_int opencl_calculate_errors(opencldata& opencl, cl::Buffer& output_layer, cl::Buffer& errors, size_t neural_network_count, size_t output_layer_size, cl_double measured_value);
 
-cl_int opencl_feed_forward(opencldata& opencl, std::vector<cl_double>& previous_layer, std::vector<cl_double>& previous_layer_weights,
-	std::vector<cl_double>& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size);
-cl_int opencl_feed_forward_sum_synapses(opencldata& opencl, std::vector<cl_double>& previous_layer_synapses_output, std::vector<cl_double>& layer_biases, std::vector<cl_double>& layer_output,
-	size_t previous_layer_size, size_t layer_size, size_t neural_network_count);
-cl_int opencl_add_to_accumulators(opencldata& opencl, std::vector<cl_double>& accumulator, std::vector<cl_double>& to_add);
-cl_int opencl_calculate_errors(opencldata& opencl, std::vector<cl_double>& output_layer, std::vector<cl_double>& errors, size_t neural_network_count, size_t output_layer_size, cl_double measured_value);
-
-OpenCLImpl::Layer::Layer(size_t neurons_count, size_t outputs_count, size_t neural_network_count) :
+OpenCLImpl::Layer::Layer(cl::Context& context, size_t neurons_count, size_t outputs_count, size_t neural_network_count) :
 	single_neural_network_neurons_count(neurons_count),
 	neurons_count(neurons_count * neural_network_count),
 	biases(neurons_count * neural_network_count), 
 	weights(neurons_count * outputs_count * neural_network_count),
 	synapses_output(neurons_count * outputs_count * neural_network_count),
-	output(neurons_count * neural_network_count),
-	xai_accumulator(neurons_count * outputs_count * neural_network_count, 0),
-	accumulator(neurons_count * outputs_count * neural_network_count, 0)
+	output(neurons_count * neural_network_count)
 {
 	for (size_t k = 0; k < neural_network_count; k++) {
 		for (size_t j = 0; j < neurons_count; j++) {
@@ -29,28 +27,54 @@ OpenCLImpl::Layer::Layer(size_t neurons_count, size_t outputs_count, size_t neur
 	for (size_t i = 0; i < biases.size(); i++) {
 		biases[i] = 0;
 	}
+
+	cl_int error;
+	biases_buffer = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * biases.size(), biases.data(), &error);
+	weights_buffer = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * weights.size(), weights.data(), &error);
+	synapses_output_buffer = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * synapses_output.size(), synapses_output.data(), &error);
+	output_buffer = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * output.size(), output.data(), &error);
 }
 
 
-OpenCLImpl::MultipleNeuralNetworks::MultipleNeuralNetworks(std::vector<size_t>& topology, size_t neural_networks_count) : neural_networks_count(neural_networks_count), errors(neural_networks_count) {
+OpenCLImpl::MultipleNeuralNetworks::MultipleNeuralNetworks(opencldata& data, const std::vector<size_t>& topology, size_t neural_networks_count)
+	: neural_networks_count(neural_networks_count), errors(neural_networks_count), data(data), helper_error_vector(neural_networks_count) {
+
+	cl_int error;
 	size_t layers_count = topology.size();
 	for (size_t i = 0; i < topology.size(); i++) {
 		size_t outputs_count = i == layers_count - 1 ? 0 : topology[i + 1];
 
-		layers.push_back(Layer(topology[i], outputs_count, neural_networks_count));
+		layers.push_back(Layer(data.context, topology[i], outputs_count, neural_networks_count));
 	}
+	feed_forward_kernel = cl::Kernel(data.program, "FeedForward");
+	sum_kernel = cl::Kernel(data.program, "FeedForwardSum");
+	errors_kernel = cl::Kernel(data.program, "CalcuateErrors");
+	errors_buffer = cl::Buffer(data.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * helper_error_vector.size(), helper_error_vector.data(), &error);
 }
-void OpenCLImpl::MultipleNeuralNetworks::accumulate_xai(size_t neural_network_id) {
-	for (size_t i = 0; i < layers.size() - 1; i++) {
-		Layer& layer = layers[i];
-		size_t weights_count = (layer.weights.size() / neural_networks_count);
-		size_t offset = neural_network_id * weights_count;
-		
-		for (size_t j = offset; j < offset + weights_count; j++) {
-			layer.xai_accumulator[j] += layer.synapses_output[j];
+
+
+std::vector<double> OpenCLImpl::MultipleNeuralNetworks::get_errors() {
+
+	size_t nnid = 0;
+	double lowest_mean = DBL_MAX;
+	size_t lowest_index = nnid;
+	for (auto const& l : errors) {
+		double sum = 0;
+		for (auto const& r : l) {
+			sum += r;
 		}
+
+		double relative_mean = sum / l.size(); 
+		if (relative_mean < lowest_mean) {
+			lowest_mean = relative_mean;
+			lowest_index = nnid;
+		}
+		nnid++;
 	}
+
+	return errors[lowest_index];
 }
+
 
 void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>& input, double measured_value, opencldata& opencl) {
 	std::vector<cl_double>& first_layer_output = layers[0].output;
@@ -67,135 +91,97 @@ void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>&
 		}
 	}
 
+	cl_int error;
+	layers[0].output_buffer = cl::Buffer(data.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * layers[0].output.size(), layers[0].output.data(), &error);
+
 	for (size_t i = 0; i < layers.size() - 1; i++) {
 		Layer& prev_layer = layers[i];
 		Layer& next_layer = layers[i + 1];
 		opencl_feed_forward(opencl,
-			prev_layer.output,
-			prev_layer.weights,
-			prev_layer.synapses_output,
+			feed_forward_kernel,
+			prev_layer.output_buffer,
+			prev_layer.weights_buffer,
+			prev_layer.synapses_output_buffer,
 			neural_networks_count,
 			next_layer.single_neural_network_neurons_count,
 			prev_layer.single_neural_network_neurons_count
 		);
 
+		//cl_int error = data.queue.enqueueReadBuffer(prev_layer.synapses_output_buffer, CL_FALSE, 0, sizeof(cl_double) * prev_layer.synapses_output.size(), prev_layer.synapses_output.data());
+
 		opencl_feed_forward_sum_synapses(opencl,
-			prev_layer.synapses_output,
-			next_layer.biases,
-			next_layer.output,
+			sum_kernel,
+			prev_layer.synapses_output_buffer,
+			next_layer.biases_buffer,
+			next_layer.output_buffer,
 			prev_layer.single_neural_network_neurons_count,
 			next_layer.single_neural_network_neurons_count,
 			neural_networks_count
 		);
 
-		//opencl_add_to_accumulators(opencl, prev_layer.accumulator, prev_layer.synapses_output);
+		error = data.queue.enqueueReadBuffer(next_layer.output_buffer, CL_FALSE, 0, sizeof(cl_double) * next_layer.output.size(), next_layer.output.data());
 	}
 
-	std::vector<cl_double> errors(neural_networks_count, 0);
+
+	//std::vector<cl_double> errors(neural_networks_count, 0);
 
 	Layer& output_layer = layers.back();
-	opencl_calculate_errors(opencl, output_layer.output, errors, neural_networks_count, output_layer.single_neural_network_neurons_count, static_cast<cl_double>(measured_value));
-	//for (size_t nnid = 0; nnid < neural_networks_count; nnid++) {
-	//	this->errors[nnid].push_back(errors[nnid]);
-	//	if (errors[nnid] < 0.60 && nnid % 2 == 0) {
-	//		accumulate_xai(nnid);
-	//	}
-	//}
+	opencl_calculate_errors(opencl, output_layer.output_buffer, errors_buffer, neural_networks_count, output_layer.single_neural_network_neurons_count, static_cast<cl_double>(measured_value));
+	data.queue.enqueueReadBuffer(errors_buffer, CL_FALSE, 0, sizeof(cl_double) * helper_error_vector.size(), helper_error_vector.data());
+
+
+	for (size_t i = 0; i < helper_error_vector.size(); i++) {
+		errors[i].push_back(helper_error_vector[i]);
+	}
 }
 
 
-cl_int opencl_feed_forward(opencldata& opencl, std::vector<cl_double>& previous_layer, std::vector<cl_double>& previous_layer_weights,
-	std::vector<cl_double>& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size) {
-
+cl_int opencl_feed_forward(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer, cl::Buffer& previous_layer_weights, cl::Buffer& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size) {
 	cl::Context& context = opencl.context;
 	cl::Program& program = opencl.program;
 	cl::CommandQueue& queue = opencl.queue;
 
-	cl_int error;
-
-	cl::Buffer inArray(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * previous_layer.size(), previous_layer.data(), &error);
-	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * previous_layer_weights.size(), previous_layer_weights.data(), &error);
-	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_double) * previous_layer_synapses_output.size(), &error);
-	cl::Kernel kernel(program, "FeedForward");
-
-	kernel.setArg(0, inArray);
-	kernel.setArg(1, inBuf);
-	kernel.setArg(2, outBuf);
+	kernel.setArg(0, previous_layer);
+	kernel.setArg(1, previous_layer_weights);
+	kernel.setArg(2, previous_layer_synapses_output);
 	kernel.setArg(3, static_cast<cl_int>(previous_layer_size));
 	kernel.setArg(4, static_cast<cl_int>(layer_size));
 
-	queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(previous_layer_size, layer_size, neural_network_count));
-	error = queue.enqueueReadBuffer(outBuf, CL_FALSE, 0, sizeof(cl_double) * previous_layer_synapses_output.size(), previous_layer_synapses_output.data());
+	cl_int error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(previous_layer_size, layer_size, neural_network_count));
 
 	return error;
 }
 
 
-cl_int opencl_feed_forward_sum_synapses(opencldata& opencl, std::vector<cl_double>& previous_layer_synapses_output, std::vector<cl_double>& layer_biases, std::vector<cl_double>& layer_output,
+cl_int opencl_feed_forward_sum_synapses(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer_synapses_output, cl::Buffer& layer_biases, cl::Buffer& layer_output,
 	size_t previous_layer_size, size_t layer_size, size_t neural_network_count) {
-
-	cl_int error;
-	cl::Context& context = opencl.context;
-	cl::Program& program = opencl.program;
 	cl::CommandQueue& queue = opencl.queue;
 
-	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * previous_layer_synapses_output.size(), previous_layer_synapses_output.data(), &error);
-	cl::Buffer inBiases(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * layer_biases.size(), layer_biases.data(), &error);
-	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_double) * layer_output .size(), &error);
-	cl::Kernel kernel(program, "FeedForwardSum");
-
-	kernel.setArg(0, inBuf);
-	kernel.setArg(1, outBuf);
-	kernel.setArg(2, inBiases);
+	kernel.setArg(0, previous_layer_synapses_output);
+	kernel.setArg(1, layer_output);
+	kernel.setArg(2, layer_biases);
 	kernel.setArg(3, static_cast<cl_int>(layer_size));
 	kernel.setArg(4, static_cast<cl_int>(previous_layer_size));
 
-	queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(layer_size, neural_network_count));
-	error = queue.enqueueReadBuffer(outBuf, CL_FALSE, 0, sizeof(cl_double) * layer_output.size(), layer_output.data());
+	cl_int error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(layer_size, neural_network_count));
 
 	return error;
 }
 
 
-cl_int opencl_add_to_accumulators(opencldata& opencl, std::vector<cl_double>& accumulator, std::vector<cl_double>& to_add) {
-	cl_int error;
+
+cl_int opencl_calculate_errors(opencldata& opencl, cl::Buffer& output_layer, cl::Buffer& errors, size_t neural_network_count, size_t output_layer_size, cl_double measured_value) {
 	cl::Context& context = opencl.context;
 	cl::Program& program = opencl.program;
 	cl::CommandQueue& queue = opencl.queue;
-
-	cl::Buffer accum_buf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * accumulator.size(), accumulator.data(), &error);
-	cl::Buffer to_add_buf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * to_add.size(), to_add.data(), &error);
-	cl::Buffer output_buf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_double) * accumulator .size(), &error);
-	cl::Kernel kernel(program, "AddTwoArrays");
-
-	kernel.setArg(0, accum_buf);
-	kernel.setArg(1, to_add_buf);
-	kernel.setArg(2, output_buf);
-
-	queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(accumulator.size()));
-	error = queue.enqueueReadBuffer(output_buf, CL_FALSE, 0, sizeof(cl_double) * accumulator.size(), accumulator.data());
-
-	return error;
-}
-
-
-cl_int opencl_calculate_errors(opencldata& opencl, std::vector<cl_double>& output_layer, std::vector<cl_double>& errors, size_t neural_network_count, size_t output_layer_size, cl_double measured_value) {
-	cl_int error;
-	cl::Context& context = opencl.context;
-	cl::Program& program = opencl.program;
-	cl::CommandQueue& queue = opencl.queue;
-
-	cl::Buffer inArray(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_double) * output_layer.size(), output_layer.data(), &error);
-	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_double) * errors.size(), &error);
 	cl::Kernel kernel(program, "CalculateErrors");
 
-	kernel.setArg(0, inArray);
-	kernel.setArg(1, outBuf);
+	kernel.setArg(0, output_layer);
+	kernel.setArg(1, errors);
 	kernel.setArg(2, static_cast<cl_int>(output_layer_size));
 	kernel.setArg(3, measured_value);
 
-	queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(neural_network_count));
-	error = queue.enqueueReadBuffer(outBuf, CL_FALSE, 0, sizeof(cl_double) * errors.size(), errors.data());
+	cl_int error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(neural_network_count));
 
 	return error;
 }
