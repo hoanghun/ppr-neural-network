@@ -53,10 +53,10 @@ size_t band_level_to_index(double expected_value) {
 	return Output_Layer_Count - 1;
 }
 
-struct measuredvalue {
+struct Measured_Value {
 	std::time_t timestamp = {};
 	double ist = 0;
-} typedef measuredvalue_t;
+};
 
 
 double risk(const double bg) {
@@ -68,10 +68,10 @@ double risk(const double bg) {
 
 static int callback(void* data, int argc, char** argv, char** azColName) {
 	int i;
-	std::vector<measuredvalue_t>* vector = static_cast<std::vector<measuredvalue_t>*>(data);
+	std::vector<Measured_Value>* vector = static_cast<std::vector<Measured_Value>*>(data);
 	int y, M, d, h, m;
 	float s;
-	measuredvalue_t value;
+	Measured_Value value;
 	for (i = 0; i < argc; i++) {
 		if (strcmp(azColName[i], "measuredat") == 0) {
 			std::tm timestamp = {};
@@ -95,7 +95,7 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 }
 
 
-bool load_db_data(const char* dbname, std::vector<measuredvalue_t>* vector) {
+bool load_db_data(const char* dbname, std::vector<Measured_Value>* vector) {
 	sqlite3* db;
 	const char* query = "SELECT * from measuredvalue";
 	char* zErrMsg = 0;
@@ -131,15 +131,15 @@ struct Results {
 	double std_dev = 0.0;
 };
 
-struct training_input_t {
+struct Training_Input {
 	std::vector<double> input;
-	double desired_value = 0;
+	double measured_value = 0;
 };
 
-void create_training_set(const std::vector<measuredvalue_t>& measured_values, double minutes_prediction, std::vector<training_input_t>& training_set) {
-	std::vector<measuredvalue_t> input_measured_values(Inner_Layer_Count);
+void create_training_set(const std::vector<Measured_Value>& measured_values, double minutes_prediction, std::vector<Training_Input>& training_set) {
+	std::vector<Measured_Value> input_measured_values(Inner_Layer_Count);
 	std::vector<double> neural_input(Inner_Layer_Count);
-	measuredvalue_t default_value = {};
+	Measured_Value default_value = {};
 
 	// initialization
 	size_t j = 1;
@@ -176,8 +176,8 @@ void create_training_set(const std::vector<measuredvalue_t>& measured_values, do
 			}
 
 			if (y > 0) {
-				training_input_t single_input;
-				single_input.desired_value = y;
+				Training_Input single_input;
+				single_input.measured_value = y;
 
 				for (size_t index = 0; index < input_measured_values.size(); index++) {
 					single_input.input.push_back(risk(input_measured_values[index].ist));
@@ -196,7 +196,7 @@ void create_training_set(const std::vector<measuredvalue_t>& measured_values, do
 	}
 }
 
-void train_single_network(Neural_Network& neural_network, Results& results_struct, const std::vector<training_input_t>& training_set) {
+void train_single_network(Neural_Network& neural_network, Results& results_struct, const std::vector<Training_Input>& training_set) {
 	std::vector<double> relative_errors;
 	std::vector<double> results;
 	double relative_errors_sum = 0;
@@ -215,11 +215,11 @@ void train_single_network(Neural_Network& neural_network, Results& results_struc
 		}
 
 		double x = band_index_to_level(output_index);
-		double relative_error = std::abs(x - sample.desired_value) / sample.desired_value;
+		double relative_error = std::abs(x - sample.measured_value) / sample.measured_value;
 		relative_errors_sum += relative_error;
 
 		std::vector<double> expected_result_output(Output_Layer_Count, 0.0);
-		size_t index = band_level_to_index(sample.desired_value);
+		size_t index = band_level_to_index(sample.measured_value);
 
 		expected_result_output[index] = 1;
 		relative_errors.push_back(relative_error);
@@ -263,7 +263,7 @@ void process_relative_errors(std::vector<double> relative_errors) {
 	printf("%f\n", relative_errors.back());
 }
 
-void run_pstl_version(const std::vector<size_t>& topology, const std::vector<training_input_t>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
+void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
 	auto start = std::chrono::high_resolution_clock::now();
 	std::for_each(std::execution::par, training.begin(), training.end(),
 		[&training_set](std::pair<Neural_Network, Results>& pair) {
@@ -294,7 +294,7 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<tra
 }
 
 
-void run_opencl_version(const std::vector<size_t>& topology, const std::vector<training_input_t>& training_set, size_t neural_network_count) {
+void run_opencl_version(const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set, size_t neural_network_count) {
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
 
@@ -325,7 +325,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<t
 
 	auto start = std::chrono::high_resolution_clock::now();
 	for (auto const& sample : training_set) {
-		networks.feed_forward(sample.input, sample.desired_value, data);
+		networks.feed_forward(sample.input, sample.measured_value, data);
 	}
 
 	auto stop = std::chrono::high_resolution_clock::now();
@@ -337,13 +337,13 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<t
 }
 
 int main() {
-	std::vector<measuredvalue_t> measured_values;
+	std::vector<Measured_Value> measured_values;
 	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
 	printf("Initializing srand.\n");
 	srand(static_cast<unsigned int>(time(NULL)));
 
 	double minutes_prediction = 30;
-	std::vector<training_input_t> training_set;
+	std::vector<Training_Input> training_set;
 	create_training_set(measured_values, minutes_prediction, training_set);
 
 	std::vector<size_t> topology{ 8, 16, 26, 32 };
@@ -357,6 +357,6 @@ int main() {
 		training.push_back(std::make_pair(nn, results));
 	}
 
-	//run_opencl_version(topology, training_set, training_count);
+	run_opencl_version(topology, training_set, training_count);
 	run_pstl_version(topology, training_set, training);
 }

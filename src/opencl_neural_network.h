@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <CL/cl.hpp>
+#include <random>
 
 struct opencldata {
 	cl::Context& context;
@@ -14,17 +15,17 @@ struct opencldata {
 namespace OpenCLImpl {
 	class Layer {
 	public:
-		Layer(cl::Context& context, size_t neurons_count, size_t outputs_count, size_t neural_networks_count);
+		Layer(std::uniform_real_distribution<>& distr, std::mt19937& gen, cl::Context& context, size_t neurons_count, size_t outputs_count, size_t neural_networks_count);
 		size_t neurons_count;
 		size_t single_neural_network_neurons_count;
 		cl::Buffer biases_buffer;
 		cl::Buffer weights_buffer;
 		cl::Buffer synapses_output_buffer;
 		cl::Buffer output_buffer;
-		std::vector<cl_double> biases;
-		std::vector<cl_double> weights;
-		std::vector<cl_double> synapses_output;
-		std::vector<cl_double> output;
+		std::vector<cl_float> biases;
+		std::vector<cl_float> weights;
+		std::vector<cl_float> synapses_output;
+		std::vector<cl_float> output;
 	private:
 		static float random_weight() { return rand() / float(RAND_MAX); }
 	};
@@ -43,8 +44,8 @@ namespace OpenCLImpl {
 		cl::Kernel sum_kernel;
 		cl::Kernel errors_kernel;
 		std::vector<Layer> layers;
-		std::vector<std::vector<cl_double>> errors;
-		std::vector<cl_double> helper_error_vector;
+		std::vector<std::vector<cl_float>> errors;
+		std::vector<cl_float> helper_error_vector;
 		cl::Buffer errors_buffer;
 	};
 }

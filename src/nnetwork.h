@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <fstream>
+#include <random>
 
 class Neuron;
 
@@ -16,7 +17,7 @@ struct Connection {
 
 class Neuron {
 public:
-	Neuron(size_t outputs_count, size_t index);
+	Neuron(size_t outputs_count, size_t index, std::uniform_real_distribution<>& distr, std::mt19937& gen);
 	void set_output_signal(double val) { output_signal = val; }
 	double get_output_signal() const { return output_signal; }
 	void feed_forward(Layer& previous_layer);
@@ -51,6 +52,7 @@ public:
 	void print_neural_network(std::ostream &file) const;
 	void load_weights(std::ifstream& file);
 	void add_xai_intensity(double error);
+	void export_to_svg();
 private:
 	std::vector<Layer> layers;
 	double error = 0;

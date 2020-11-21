@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <random>
 
 double Neuron::eta = 0.15;
 double Neuron::alpha = 0.5;
@@ -58,10 +59,10 @@ void Neuron::feed_forward(Layer& previous_layer) {
 	output_signal = Neuron::activate(sum);
 }
 
-Neuron::Neuron(size_t outputs_count, size_t index) {
+Neuron::Neuron(size_t outputs_count, size_t index, std::uniform_real_distribution<>& distr, std::mt19937& gen) {
 	for (size_t i = 0; i < outputs_count; i++) {
 		weights.push_back(Connection());
-		weights.back().weight = random_weight();
+		weights.back().weight = distr(gen);
 	}
 
 	this->index = index;
@@ -164,13 +165,16 @@ void Neural_Network::feed_forward(const std::vector<double>& input_values) {
 
 Neural_Network::Neural_Network(const std::vector<size_t>& topology) {
 	size_t number_of_layers = topology.size();
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_real_distribution<> distr(-1.0, 1.0);
 
 	for (size_t i = 0; i < number_of_layers; i++) {
 		layers.push_back(Layer());
 		size_t outputs_count = i == number_of_layers - 1 ? 0 : topology[i + 1];
 
 		for (size_t j = 0; j <= topology[i]; j++) { // <= because of bias node
-			layers.back().push_back(Neuron(outputs_count, j));
+			layers.back().push_back(Neuron(outputs_count, j, distr, gen));
 		}
 
 		layers.back().back().set_output_signal(1.0); // bias node
