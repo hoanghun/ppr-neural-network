@@ -54,6 +54,7 @@ public:
 	void add_xai_intensity(double error);
 	void export_to_svg();
 private:
+	void get_layer_edge_intensities(const Layer& layer, double& max_intensity, double& max_xai_intensity, double& min_intensity, double& min_xai_intensity);
 	std::vector<Layer> layers;
 	double error = 0;
 };

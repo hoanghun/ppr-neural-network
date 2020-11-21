@@ -339,15 +339,13 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 int main() {
 	std::vector<Measured_Value> measured_values;
 	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
-	printf("Initializing srand.\n");
-	srand(static_cast<unsigned int>(time(NULL)));
 
 	double minutes_prediction = 30;
 	std::vector<Training_Input> training_set;
 	create_training_set(measured_values, minutes_prediction, training_set);
 
 	std::vector<size_t> topology{ 8, 16, 26, 32 };
-	size_t training_count = 100;
+	size_t training_count = 1;
 
 	std::cout << "Training size: " << training_set.size() << std::endl;
 	std::vector<std::pair<Neural_Network, Results>> training;
@@ -357,6 +355,11 @@ int main() {
 		training.push_back(std::make_pair(nn, results));
 	}
 
-	run_opencl_version(topology, training_set, training_count);
-	run_pstl_version(topology, training_set, training);
+	//run_opencl_version(topology, training_set, training_count);
+	//run_pstl_version(topology, training_set, training);
+	
+	Neural_Network nn(topology);
+	Results results;
+	train_single_network(nn, results, training_set);
+	nn.export_to_svg();
 }

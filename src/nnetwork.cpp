@@ -5,6 +5,7 @@
 #include <sstream>
 #include <algorithm>
 #include <random>
+#include <limits>
 
 double Neuron::eta = 0.15;
 double Neuron::alpha = 0.5;
@@ -52,8 +53,8 @@ void Neuron::feed_forward(Layer& previous_layer) {
 	for (int i = 0; i < previous_layer.size(); i++) {
 		double current_intensity = previous_layer[i].get_output_signal() * previous_layer[i].weights[index].weight; 
 		sum += current_intensity;
-		previous_layer[i].weights[index].intensity_counter += current_intensity;
-		previous_layer[i].weights[index].current_intensity = current_intensity;
+		previous_layer[i].weights[index].intensity_counter += std::abs(current_intensity);
+		previous_layer[i].weights[index].current_intensity = std::abs(current_intensity);
 	}
 
 	output_signal = Neuron::activate(sum);
@@ -140,6 +141,101 @@ void Neural_Network::back_propagation(const std::vector<double>& target_values) 
 	}
 }
 
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+	size_t start_pos = str.find(from);
+	if (start_pos == std::string::npos)
+		return false;
+	str.replace(start_pos, from.length(), to);
+	return true;
+}
+
+void Neural_Network::get_layer_edge_intensities(const Layer& layer, double& max_intensity, double& max_xai_intensity, double& min_intensity, double& min_xai_intensity) {
+	double curr_max_intensity = DBL_MIN;
+	double curr_max_xai_intensity = DBL_MIN;
+	double curr_min_intensity = DBL_MAX;
+	double curr_min_xai_intensity = DBL_MAX;
+
+	for (size_t neuron_index = 0; neuron_index < layer.size() - 1; neuron_index++) {
+		const Neuron& r = layer[neuron_index];
+		for (size_t i = 0; i < r.get_weights().size(); i++) {
+			const Connection& con = r.get_weights()[i];
+			if (con.intensity_counter > curr_max_intensity) {
+				curr_max_intensity = con.intensity_counter;
+			}
+			if (con.xai_intensity_counter > curr_max_xai_intensity) {
+				curr_max_xai_intensity = con.xai_intensity_counter;
+			}
+			if (con.intensity_counter < curr_min_intensity) {
+				curr_min_intensity = con.intensity_counter;
+			}
+			if (con.xai_intensity_counter < curr_min_xai_intensity) {
+				curr_min_xai_intensity = con.xai_intensity_counter;
+			}
+		}
+
+	}
+
+	max_intensity = curr_max_intensity;
+	max_xai_intensity = curr_max_xai_intensity;
+	min_intensity = curr_min_intensity;
+	min_xai_intensity = curr_min_xai_intensity;
+}
+
+void Neural_Network::export_to_svg() {
+	std::ifstream file("nn.svg");
+	std::ofstream out_intensity_file("normal_intensity.svg");
+	std::ofstream out_xai_intensity_file("xai_intensity.svg");
+	std::string line;
+
+	double max_intensity, max_xai_intensity;
+	double min_intensity, min_xai_intensity;
+
+
+
+	while (std::getline(file, line)) {
+		if (line.find("<path class=") != std::string::npos) {
+			for (size_t layer_index = 0; layer_index < layers.size() - 1; layer_index++) {
+				const Layer& layer = layers[layer_index];
+				
+				get_layer_edge_intensities(layer, max_intensity, max_xai_intensity, min_intensity, min_xai_intensity);
+				std::cout << "max intensity = " << max_intensity << std::endl;
+				std::cout << "max xai intensity = " << max_xai_intensity << std::endl;
+				std::cout << "min intensity = " << min_intensity << std::endl;
+				std::cout << "min xai intensity = " << min_xai_intensity << std::endl;
+
+				for (size_t neuron_index = 0; neuron_index < layer.size() - 1; neuron_index++) {
+					const Neuron& r = layer[neuron_index];
+					for (size_t i = 0; i < r.get_weights().size(); i++) {
+						double synapse_intensity = r.get_weights()[i].intensity_counter;
+						double synapse_xai_intensity = r.get_weights()[i].xai_intensity_counter;
+						double normalized_intensity = ((synapse_intensity - min_intensity) / (max_intensity - min_intensity)) * 255;
+						double normalized_xai_intensity = ((synapse_xai_intensity - min_xai_intensity) / (max_xai_intensity - min_xai_intensity)) * 255;
+
+						std::cout << normalized_intensity << std::endl;
+
+						std::string intensity_string = line;
+						std::string xai_intensity_string = line;
+
+						replace(intensity_string, "rgb(80, 80, 80)", "rgb(0, " + std::to_string(normalized_intensity) + ", 0)");
+						out_intensity_file << intensity_string << std::endl;
+						replace(xai_intensity_string, "rgb(80, 80, 80)", "rgb(0, 0, " + std::to_string(normalized_xai_intensity) + ")");
+						out_xai_intensity_file << xai_intensity_string << std::endl;
+
+						std::getline(file, line);
+					}
+
+				}
+
+			}
+			out_intensity_file << line << std::endl;
+			out_xai_intensity_file << line << std::endl;
+		}
+		else {
+			out_intensity_file << line << std::endl;
+			out_xai_intensity_file << line << std::endl;
+		}
+	}
+}
 
 void Neural_Network::feed_forward(const std::vector<double>& input_values) {
 	if (input_values.size() != layers[0].size() - 1) {
