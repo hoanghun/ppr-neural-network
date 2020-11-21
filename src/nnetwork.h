@@ -44,7 +44,7 @@ private:
 
 class Neural_Network {
 public:
-	Neural_Network(const std::vector<unsigned>& topology);
+	Neural_Network(const std::vector<size_t>& topology);
 	void feed_forward(const std::vector<double>& input_vals);
 	void back_propagation(const std::vector<double>& target_vals);
 	void get_results(std::vector<double>& result_vals);

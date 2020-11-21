@@ -162,7 +162,7 @@ void Neural_Network::feed_forward(const std::vector<double>& input_values) {
 	// on output layer we'll do softmax
 }
 
-Neural_Network::Neural_Network(const std::vector<unsigned>& topology) {
+Neural_Network::Neural_Network(const std::vector<size_t>& topology) {
 	size_t number_of_layers = topology.size();
 
 	for (size_t i = 0; i < number_of_layers; i++) {

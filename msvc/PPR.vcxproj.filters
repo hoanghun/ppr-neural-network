@@ -24,6 +24,9 @@
     <ClCompile Include="..\src\nnetwork.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\opencl_neural_network.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\sqlite\sqlite3.h">
@@ -33,6 +36,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\nnetwork.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\opencl_neural_network.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

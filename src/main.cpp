@@ -9,6 +9,7 @@
 
 #include "nnetwork.h"
 #include "sqlite/sqlite3.h"
+#include "opencl_neural_network.h"
 
 static constexpr double Low_Threshold = 3.0;            //mmol/L below which a medical attention is needed
 static constexpr double High_Threshold = 13.0;          //dtto above
@@ -238,6 +239,37 @@ struct training_input_t {
 	results_struct.relative_errors = relative_errors;
 }
 
+
+
+ cl::Device select_gpu()
+ {
+	 std::vector<cl::Platform> platforms;
+	 cl::Platform::get(&platforms);
+
+	 cl::Device best_gpu;
+	 cl_uint best_max_compute_units = 0;
+	 cl_uint best_max_clock_frequency = 0;
+
+	 cl_uint max_compute_units;
+	 cl_uint max_clock_frequency;
+	 std::vector<cl::Device> devices;
+	 for (auto p : platforms) {
+		 p.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+		 for (auto d : devices) {
+			 d.getInfo(CL_DEVICE_MAX_COMPUTE_UNITS, &max_compute_units);
+			 d.getInfo(CL_DEVICE_MAX_CLOCK_FREQUENCY, &max_clock_frequency);
+
+			 if ((max_compute_units * max_clock_frequency) > (best_max_compute_units * best_max_clock_frequency)) {
+				 best_max_clock_frequency = max_clock_frequency;
+				 best_max_compute_units = max_compute_units;
+				 best_gpu = d;
+			 }
+		 }
+	 }
+
+	 return best_gpu;
+ }
+
 int main() {
 	std::vector<measuredvalue_t> measured_values;
 	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
@@ -248,15 +280,49 @@ int main() {
 	std::vector<training_input_t> training_set;
 	create_training_set(measured_values, minutes_prediction, training_set);
 
-	std::vector<unsigned> topology{ 8, 16, 26, 32 };
-	size_t training_count = 10;
-	
-	std::vector<std::pair<Neural_Network, Results>> training;
-	for (size_t i = 0; i < training_count; i++) {
-		Neural_Network nn(topology);
-		Results results;
-		training.push_back(std::make_pair(nn, results));
+	std::vector<size_t> topology{ 8, 16, 26, 32 };
+	//size_t training_count = 10;
+	//
+	//std::vector<std::pair<Neural_Network, Results>> training;
+	//for (size_t i = 0; i < training_count; i++) {
+	//	Neural_Network nn(topology);
+	//	Results results;
+	//	training.push_back(std::make_pair(nn, results));
+	//}
+
+
+
+	cl::Device gpu = select_gpu();
+
+	std::ifstream helloWorldFile("super.cl");
+	std::string src(std::istreambuf_iterator<char>(helloWorldFile), (std::istreambuf_iterator<char>()));
+
+	cl::Program::Sources sources(1, std::make_pair(src.c_str(), src.length() + 1));
+
+	cl::Context context(gpu);
+
+	cl::Program program(context, sources);
+
+	auto err = program.build("-cl-std=CL1.2");
+	opencldata data(context, program, gpu);
+
+	constexpr size_t neural_network_count = 1000;
+
+	OpenCLImpl::MultipleNeuralNetworks networks(topology, neural_network_count);
+
+	size_t counter = 0;
+	Neural_Network nn(topology);
+
+	std::cout << "Set of " << neural_network_count << " neural networks." << std::endl;
+
+	auto start = std::chrono::high_resolution_clock::now();
+	for (auto const& sample : training_set) {
+		networks.feed_forward(sample.input, sample.desired_value, data);
 	}
+
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	std::cout << "Duration for sequential in milliseconds: " << duration.count() << std::endl;
 
 	//std::cout << "Set of " << training_count << " neural networks." << std::endl;
 
@@ -269,49 +335,49 @@ int main() {
 	//auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
 	//std::cout << "Duration for sequential in milliseconds: " << duration.count() << std::endl;
 
-	auto start = std::chrono::high_resolution_clock::now();
-	std::for_each(std::execution::par, training.begin(), training.end(),
-		[&training_set](std::pair<Neural_Network, Results>& pair) {
-			train_single_network(pair.first, pair.second, training_set);
-		}
-	);
-	auto stop = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for parallel in milliseconds: " << duration.count() << std::endl;
+	//auto start = std::chrono::high_resolution_clock::now();
+	//std::for_each(std::execution::par, training.begin(), training.end(),
+	//	[&training_set](std::pair<Neural_Network, Results>& pair) {
+	//		train_single_network(pair.first, pair.second, training_set);
+	//	}
+	//);
+	//auto stop = std::chrono::high_resolution_clock::now();
+	//auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	//std::cout << "Duration for parallel in milliseconds: " << duration.count() << std::endl;
 
-	auto lowest_mean = std::min_element(std::begin(training), std::end(training), [](const std::pair<Neural_Network, Results> &lhs, const std::pair<Neural_Network, Results> &rhs) {
-		return lhs.second.mean < rhs.second.mean;
-		}
-	);
+	//auto lowest_mean = std::min_element(std::begin(training), std::end(training), [](const std::pair<Neural_Network, Results> &lhs, const std::pair<Neural_Network, Results> &rhs) {
+	//	return lhs.second.mean < rhs.second.mean;
+	//	}
+	//);
 
-	auto &results = (*lowest_mean).second;
-	auto mean = results.mean;
-	auto &relative_errors = results.relative_errors;
-	std::sort(relative_errors.begin(), relative_errors.end());
+	//auto &results = (*lowest_mean).second;
+	//auto mean = results.mean;
+	//auto &relative_errors = results.relative_errors;
+	//std::sort(relative_errors.begin(), relative_errors.end());
 
-	double std_dev_sum = 0;
-	for (size_t i = 0; i < relative_errors.size(); i++) {
-		std_dev_sum += (relative_errors[i] - mean) * (relative_errors[i] - mean);
-	}
+	//double std_dev_sum = 0;
+	//for (size_t i = 0; i < relative_errors.size(); i++) {
+	//	std_dev_sum += (relative_errors[i] - mean) * (relative_errors[i] - mean);
+	//}
 
-	double std_dev = std::sqrt(std_dev_sum / relative_errors.size());
+	//double std_dev = std::sqrt(std_dev_sum / relative_errors.size());
 
-	size_t step = relative_errors.size() / 100;
+	//size_t step = relative_errors.size() / 100;
 
-	printf("Mean of relative errors is %f and standard deviation is %f\n", mean, std_dev);
-	printf("Printing cummulation function:\n");
-	for (size_t i = 0; i < relative_errors.size() - 1; i += step) {
-		printf("%f ", relative_errors[i]);
-	}
-	printf("%f\n", relative_errors.back());
+	//printf("Mean of relative errors is %f and standard deviation is %f\n", mean, std_dev);
+	//printf("Printing cummulation function:\n");
+	//for (size_t i = 0; i < relative_errors.size() - 1; i += step) {
+	//	printf("%f ", relative_errors[i]);
+	//}
+	//printf("%f\n", relative_errors.back());
 
-	Neural_Network &neural_network = (*lowest_mean).first;
+	//Neural_Network &neural_network = (*lowest_mean).first;
 
-	std::ofstream file("neural.ini");
-	if (file.is_open()) {
-		neural_network.print_neural_network(file);
-	}
-	file.close();
+	//std::ofstream file("neural.ini");
+	//if (file.is_open()) {
+	//	neural_network.print_neural_network(file);
+	//}
+	//file.close();
 
 	//std::ifstream infile("neural.ini");
 	//if (infile.is_open()) {
