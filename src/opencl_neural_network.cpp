@@ -20,16 +20,16 @@ OpenCLImpl::Layer::Layer(std::uniform_real_distribution<>& distr, std::mt19937& 
 	for (size_t k = 0; k < neural_network_count; k++) {
 		for (size_t j = 0; j < neurons_count; j++) {
 			for (size_t i = 0; i < outputs_count; i++) {
-				weights[k * (neurons_count * outputs_count) + (j * outputs_count + i)] = distr(gen);
+				weights[k * (neurons_count * outputs_count) + (j * outputs_count + i)] = static_cast<float>(distr(gen));
 			}
 		}
 	}
 
 	for (size_t i = 0; i < biases.size(); i++) {
-		biases[i] = distr(gen);
+		biases[i] = static_cast<float>(distr(gen));
 	}
 
-	cl_int error;
+	cl_int error = CL_SUCCESS;
 	biases_buffer = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(cl_float) * biases.size(), biases.data(), &error);
 	weights_buffer = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(cl_float) * weights.size(), weights.data(), &error);
 	synapses_output_buffer = cl::Buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_float) * synapses_output.size(), synapses_output.data(), &error);
@@ -95,7 +95,7 @@ void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>&
 		}
 	}
 
-	cl_int error;
+	cl_int error = CL_SUCCESS;
 	layers[0].output_buffer = cl::Buffer(data.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_float) * layers[0].output.size(), layers[0].output.data(), &error);
 
 	for (size_t i = 0; i < layers.size() - 1; i++) {

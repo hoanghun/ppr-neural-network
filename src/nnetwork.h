@@ -52,9 +52,9 @@ public:
 	void print_neural_network(std::ostream &file) const;
 	void load_weights(std::ifstream& file);
 	void add_xai_intensity(double error);
-	void export_to_svg();
+	void export_to_svg() const;
 private:
-	void get_layer_edge_intensities(const Layer& layer, double& max_intensity, double& max_xai_intensity, double& min_intensity, double& min_xai_intensity);
+	void get_layer_edge_intensities(const Layer& layer, double& max_intensity, double& max_xai_intensity, double& min_intensity, double& min_xai_intensity) const;
 	std::vector<Layer> layers;
 	double error = 0;
 };

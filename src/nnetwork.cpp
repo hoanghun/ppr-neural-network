@@ -149,7 +149,7 @@ bool replace(std::string& str, const std::string& from, const std::string& to) {
 	return true;
 }
 
-void Neural_Network::get_layer_edge_intensities(const Layer& layer, double& max_intensity, double& max_xai_intensity, double& min_intensity, double& min_xai_intensity) {
+void Neural_Network::get_layer_edge_intensities(const Layer& layer, double& max_intensity, double& max_xai_intensity, double& min_intensity, double& min_xai_intensity) const {
 	double curr_max_intensity = DBL_MIN;
 	double curr_max_xai_intensity = DBL_MIN;
 	double curr_min_intensity = DBL_MAX;
@@ -181,7 +181,7 @@ void Neural_Network::get_layer_edge_intensities(const Layer& layer, double& max_
 	min_xai_intensity = curr_min_xai_intensity;
 }
 
-void Neural_Network::export_to_svg() {
+void Neural_Network::export_to_svg() const {
 	std::ifstream file("nn.svg");
 	std::ofstream out_intensity_file("normal_intensity.svg");
 	std::ofstream out_xai_intensity_file("xai_intensity.svg");
@@ -198,10 +198,6 @@ void Neural_Network::export_to_svg() {
 				const Layer& layer = layers[layer_index];
 				
 				get_layer_edge_intensities(layer, max_intensity, max_xai_intensity, min_intensity, min_xai_intensity);
-				std::cout << "max intensity = " << max_intensity << std::endl;
-				std::cout << "max xai intensity = " << max_xai_intensity << std::endl;
-				std::cout << "min intensity = " << min_intensity << std::endl;
-				std::cout << "min xai intensity = " << min_xai_intensity << std::endl;
 
 				for (size_t neuron_index = 0; neuron_index < layer.size() - 1; neuron_index++) {
 					const Neuron& r = layer[neuron_index];
@@ -210,8 +206,6 @@ void Neural_Network::export_to_svg() {
 						double synapse_xai_intensity = r.get_weights()[i].xai_intensity_counter;
 						double normalized_intensity = ((synapse_intensity - min_intensity) / (max_intensity - min_intensity)) * 255;
 						double normalized_xai_intensity = ((synapse_xai_intensity - min_xai_intensity) / (max_xai_intensity - min_xai_intensity)) * 255;
-
-						std::cout << normalized_intensity << std::endl;
 
 						std::string intensity_string = line;
 						std::string xai_intensity_string = line;

@@ -11,6 +11,11 @@
 #include "sqlite/sqlite3.h"
 #include "opencl_neural_network.h"
 
+struct Measured_Value {
+	std::time_t timestamp = {};
+	double ist = 0;
+};
+
 static constexpr double Low_Threshold = 3.0;            //mmol/L below which a medical attention is needed
 static constexpr double High_Threshold = 13.0;          //dtto above
 static constexpr size_t Internal_Bound_Count = 30;      //number of bounds inside the thresholds
@@ -38,11 +43,9 @@ size_t band_level_to_index(double expected_value) {
 		return Output_Layer_Count - 1;
 	}
 
-	int i;
 	double interval_ceiling = Low_Threshold;
 
-	for (i = 1; i <= Internal_Bound_Count; i++) {
-
+	for (size_t i = 1; i <= Internal_Bound_Count; i++) {
 		interval_ceiling += Band_Size;
 
 		if (interval_ceiling > expected_value) {
@@ -53,18 +56,11 @@ size_t band_level_to_index(double expected_value) {
 	return Output_Layer_Count - 1;
 }
 
-struct Measured_Value {
-	std::time_t timestamp = {};
-	double ist = 0;
-};
-
-
 double risk(const double bg) {
 	// DOI:  10.1080/10273660008833060
 	const double original_risk = 1.794 * (pow(log(bg), 1.026) - 1.861);    //mmol/L
 	return original_risk / 3.5;
 }
-
 
 static int callback(void* data, int argc, char** argv, char** azColName) {
 	int i;
@@ -101,14 +97,10 @@ bool load_db_data(const char* dbname, std::vector<Measured_Value>* vector) {
 	char* zErrMsg = 0;
 
 	int rc = sqlite3_open(dbname, &db);
-	printf("Query: %s\n", query);
 
 	if (rc) {
 		fprintf(stderr, "Can't open database: %s.\n", sqlite3_errmsg(db));
 		return false;
-	}
-	else {
-		fprintf(stderr, "Opened database successfully.\n");
 	}
 
 	rc = sqlite3_exec(db, query, callback, (void*)vector, &zErrMsg);
@@ -116,9 +108,7 @@ bool load_db_data(const char* dbname, std::vector<Measured_Value>* vector) {
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "SQL error: %s.\n", zErrMsg);
 		sqlite3_free(zErrMsg);
-	}
-	else {
-		fprintf(stdout, "Operation done successfully.\n");
+		return false;
 	}
 	sqlite3_close(db);
 
@@ -264,6 +254,9 @@ void process_relative_errors(std::vector<double> relative_errors) {
 }
 
 void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
+	std::cout << std::endl << std::endl << "Running PSTL algorithm with multiclass clasification for " << training.size() << " neural networks." << std::endl;
+	std::cout << "================================================================================" << std::endl;
+
 	auto start = std::chrono::high_resolution_clock::now();
 	std::for_each(std::execution::par, training.begin(), training.end(),
 		[&training_set](std::pair<Neural_Network, Results>& pair) {
@@ -272,7 +265,7 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Tra
 	);
 	auto stop = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for PSTL in milliseconds: " << duration.count() << std::endl << std::endl;
+	std::cout << "Duration for Pstl in milliseconds: " << duration.count() << std::endl;
 
 	auto lowest_mean = std::min_element(std::begin(training), std::end(training), [](const std::pair<Neural_Network, Results> &lhs, const std::pair<Neural_Network, Results> &rhs) {
 		return lhs.second.mean < rhs.second.mean;
@@ -285,7 +278,8 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Tra
 	process_relative_errors(relative_errors);
 
 	const Neural_Network &neural_network = (*lowest_mean).first;
-
+	
+	neural_network.export_to_svg();
 	std::ofstream file("neural.ini");
 	if (file.is_open()) {
 		neural_network.print_neural_network(file);
@@ -298,7 +292,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
 
-	auto platform = platforms.front();
+	auto &platform = platforms.front();
 	std::vector<cl::Device> devices;
 	platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
 	if (devices.size() == 0) {
@@ -321,7 +315,8 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	size_t counter = 0;
 	Neural_Network nn(topology);
 
-	std::cout << "Set of " << neural_network_count << " neural networks." << std::endl;
+	std::cout << std::endl << std::endl << "Running OpenCL algorithm with multiclass clasification for " << neural_network_count << " neural networks." << std::endl;
+	std::cout << "================================================================================" << std::endl;
 
 	auto start = std::chrono::high_resolution_clock::now();
 	for (auto const& sample : training_set) {
@@ -330,7 +325,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 
 	auto stop = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for OPENCL in milliseconds: " << duration.count() << std::endl << std::endl;
+	std::cout << "Duration for OpenCL in milliseconds: " << duration.count() << std::endl << std::endl;
 
 	auto relative_errors = networks.get_errors();
 	process_relative_errors(relative_errors);
@@ -338,16 +333,18 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 
 int main() {
 	std::vector<Measured_Value> measured_values;
-	load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values);
+	if (!load_db_data("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", &measured_values)) {
+		exit(-1);
+	}
 
 	double minutes_prediction = 30;
 	std::vector<Training_Input> training_set;
 	create_training_set(measured_values, minutes_prediction, training_set);
+	std::cout << "Created training size: " << training_set.size() << " using risk function." << std::endl;
 
 	std::vector<size_t> topology{ 8, 16, 26, 32 };
-	size_t training_count = 1;
+	size_t training_count = 100;
 
-	std::cout << "Training size: " << training_set.size() << std::endl;
 	std::vector<std::pair<Neural_Network, Results>> training;
 	for (size_t i = 0; i < training_count; i++) {
 		Neural_Network nn(topology);
@@ -355,11 +352,6 @@ int main() {
 		training.push_back(std::make_pair(nn, results));
 	}
 
-	//run_opencl_version(topology, training_set, training_count);
-	//run_pstl_version(topology, training_set, training);
-	
-	Neural_Network nn(topology);
-	Results results;
-	train_single_network(nn, results, training_set);
-	nn.export_to_svg();
+	run_opencl_version(topology, training_set, training_count);
+	run_pstl_version(topology, training_set, training);
 }
