@@ -182,9 +182,15 @@ void Neural_Network::get_layer_edge_intensities(const Layer& layer, double& max_
 }
 
 void Neural_Network::export_to_svg() const {
-	std::ifstream file("nn.svg");
+	std::ifstream svg_template("nn.svg");
 	std::ofstream out_intensity_file("normal_intensity.svg");
 	std::ofstream out_xai_intensity_file("xai_intensity.svg");
+
+	if (!svg_template.is_open() || !out_intensity_file.is_open() || !out_xai_intensity_file.is_open()) {
+		perror("Could not open one of the files.\n");
+		return;
+	}
+
 	std::string line;
 
 	double max_intensity, max_xai_intensity;
@@ -192,7 +198,7 @@ void Neural_Network::export_to_svg() const {
 
 
 
-	while (std::getline(file, line)) {
+	while (std::getline(svg_template, line)) {
 		if (line.find("<path class=") != std::string::npos) {
 			for (size_t layer_index = 0; layer_index < layers.size() - 1; layer_index++) {
 				const Layer& layer = layers[layer_index];
@@ -215,7 +221,7 @@ void Neural_Network::export_to_svg() const {
 						replace(xai_intensity_string, "rgb(80, 80, 80)", "rgb(0, 0, " + std::to_string(normalized_xai_intensity) + ")");
 						out_xai_intensity_file << xai_intensity_string << std::endl;
 
-						std::getline(file, line);
+						std::getline(svg_template, line);
 					}
 
 				}
@@ -250,7 +256,7 @@ void Neural_Network::feed_forward(const std::vector<double>& input_values) {
 
 	//Layer& output_layer = layers.back();
 	//softmax(output_layer);
-	// on output layer we'll do softmax
+	//skipping softmax atm. doesnt give good results
 }
 
 Neural_Network::Neural_Network(const std::vector<size_t>& topology) {
@@ -313,14 +319,11 @@ void Neural_Network::load_weights(std::ifstream& file) {
 			std::istringstream iss(line);
 
 			if (!(iss >> weight_index >> neuron_index >> weight)) {
-				printf("Error in string stream.");
+				perror("Error in string stream.");
 			}
 
 			if (layer_index < layers.size() && neuron_index < layers[layer_index].size()) {
 				layers[layer_index][neuron_index].set_weight(weight_index, weight);
-			}
-			else {
-				printf("Invalid indicies layer_index: %zu or neuron_index: %zu\n", layer_index, neuron_index);
 			}
 		}
 	}
