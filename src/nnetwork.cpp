@@ -306,13 +306,15 @@ void Neural_Network::load_weights(std::ifstream& file) {
 	std::string line;
 	size_t layer_index = 0;
 	std::getline(file, line);
-	if (line.find("[hidden_layer_") == std::string::npos) {
+	const std::string hidden_layer_string("[hidden_layer_");
+
+	if (line.find(hidden_layer_string) == std::string::npos) {
 		std::cout << "Invalid file. Not loading and using random weights." << std::endl;
 		return;
 	}
 
 	while (std::getline(file, line)) {
-		if (line.find("[hidden_layer_") != std::string::npos) {
+		if (line.find(hidden_layer_string) != std::string::npos) {
 			layer_index++;
 		}
 		else {
