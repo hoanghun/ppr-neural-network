@@ -85,7 +85,7 @@ void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>&
 	size_t first_layer_neurons_count = layers[0].single_neural_network_neurons_count;
 
 	if (input.size() != first_layer_neurons_count) {
-		perror("Invalid input size\n");
+		std::cout << "Invalid input size" << std::endl;
 		return;
 	}
 

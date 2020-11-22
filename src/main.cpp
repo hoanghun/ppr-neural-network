@@ -137,7 +137,7 @@ void process_relative_errors(std::vector<double> relative_errors, bool save_to_c
 			std::cout << "Saved errors into file errors.csv." << std::endl;
 		}
 		else {
-			perror("Cannot write into file 'error.csv'");
+			std::cout << "Cannot write into file 'error.csv'" << std::endl;
 		}
 	}
 }
@@ -189,14 +189,14 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	std::vector<cl::Device> devices;
 	platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
 	if (devices.size() == 0) {
-		perror("No GPU\n");
+		std::cout << "No GPU" << std::endl;
 		return;
 	}
 	cl::Device gpu = devices.front();
 
 	std::ifstream openCL_file("../src/neural_network.cl");
 	if (!openCL_file.is_open()) {
-		perror("Invalid open cl file\n");
+		std::cout << "Invalid open cl file" << std::endl;
 		return;
 	}
 	std::string src(std::istreambuf_iterator<char>(openCL_file), (std::istreambuf_iterator<char>()));
@@ -206,7 +206,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 
 	auto err = program.build("-cl-std=CL1.2");
 	if (err != CL_SUCCESS) {
-		perror("Didnt build the opencl program\n");
+		std::cout << "Didnt build the opencl program" << std::endl;
 		return;
 	}
 	OpenCL_Data data(context, program, gpu);

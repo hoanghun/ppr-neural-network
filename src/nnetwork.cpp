@@ -188,7 +188,7 @@ void Neural_Network::export_to_svg() const {
 	std::ofstream out_xai_intensity_file("xai_intensity.svg");
 
 	if (!svg_template.is_open() || !out_intensity_file.is_open() || !out_xai_intensity_file.is_open()) {
-		perror("Could not open one of the files.\n");
+		std::cout << "Could not open one of the files." << std::endl;
 		return;
 	}
 
@@ -304,8 +304,13 @@ void Neural_Network::print_neural_network(std::ostream &file) const {
 
 void Neural_Network::load_weights(std::ifstream& file) {
 	std::string line;
-	int layer_index = -1;
-	
+	size_t layer_index = 0;
+	std::getline(file, line);
+	if (line.find("[hidden_layer_") == std::string::npos) {
+		std::cout << "Invalid file. Not loading and using random weights." << std::endl;
+		return;
+	}
+
 	while (std::getline(file, line)) {
 		if (line.find("[hidden_layer_") != std::string::npos) {
 			layer_index++;
@@ -318,7 +323,8 @@ void Neural_Network::load_weights(std::ifstream& file) {
 			std::istringstream iss(line);
 
 			if (!(iss >> weight_index >> neuron_index >> weight)) {
-				perror("Error in string stream.");
+				std::cout << "Error in string stream." << std::endl;
+				continue;
 			}
 
 			if (layer_index < layers.size() && neuron_index < layers[layer_index].size()) {
