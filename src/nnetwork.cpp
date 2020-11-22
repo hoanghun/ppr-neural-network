@@ -299,8 +299,6 @@ void Neural_Network::print_neural_network(std::ostream &file) const {
 			}
 		}
 	}
-
-	std::cout << "Finished outputing neural network" << std::endl;
 }
 
 void Neural_Network::load_weights(std::ifstream& file) {
@@ -315,7 +313,7 @@ void Neural_Network::load_weights(std::ifstream& file) {
 			size_t weight_index, neuron_index;
 			double weight;
 
-			std::replace_if(line.begin(), line.end(), [](const char& c) { return c != '.' && !std::isdigit(c); }, ' ');
+			std::replace_if(line.begin(), line.end(), [](const char& c) { return c != '.' && c != '-' && !std::isdigit(c); }, ' ');
 			std::istringstream iss(line);
 
 			if (!(iss >> weight_index >> neuron_index >> weight)) {

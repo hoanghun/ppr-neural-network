@@ -69,7 +69,7 @@ double risk(const double bg) {
 	return original_risk / 3.5;
 }
 
-bool create_training_set(const std::string& db_name, size_t input_layer_count, double minutes_prediction, std::vector<Training_Input>& training_set) {
+bool create_training_set(const std::string& db_name, size_t input_layer_count, size_t minutes_prediction, std::vector<Training_Input>& training_set) {
 	std::vector<Measured_Value> measured_values;
 	if (!load_db_data(db_name.c_str(), &measured_values)) {
 		return false;

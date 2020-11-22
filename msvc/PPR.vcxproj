@@ -22,12 +22,14 @@
     <ClCompile Include="..\src\main.cpp" />
     <ClCompile Include="..\src\nnetwork.cpp" />
     <ClCompile Include="..\src\opencl_neural_network.cpp" />
+    <ClCompile Include="..\src\parsing_utils.cpp" />
     <ClCompile Include="..\src\sqlite\sqlite3.c" />
     <ClCompile Include="..\src\training_set_utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\nnetwork.h" />
     <ClInclude Include="..\src\opencl_neural_network.h" />
+    <ClInclude Include="..\src\parsing_utils.h" />
     <ClInclude Include="..\src\sqlite\sqlite3.h" />
     <ClInclude Include="..\src\sqlite\sqlite3ext.h" />
     <ClInclude Include="..\src\training_set_utils.h" />

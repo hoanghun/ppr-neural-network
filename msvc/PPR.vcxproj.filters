@@ -30,6 +30,9 @@
     <ClCompile Include="..\src\training_set_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\parsing_utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\sqlite\sqlite3.h">
@@ -45,6 +48,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\training_set_utils.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\parsing_utils.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

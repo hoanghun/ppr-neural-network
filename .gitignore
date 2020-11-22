@@ -3,3 +3,4 @@ msvc/Debug/*
 msvc/x64/*
 .vs/
 msvc/neural.ini
+*.sqlite

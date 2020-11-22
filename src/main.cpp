@@ -5,11 +5,13 @@
 #include <algorithm>
 #include <chrono>
 #include <execution>
+#include <sstream>
 
 #include "nnetwork.h"
 #include "sqlite/sqlite3.h"
 #include "opencl_neural_network.h"
 #include "training_set_utils.h"
+#include "parsing_utils.h"
 
 static constexpr double Low_Threshold = 3.0;            //mmol/L below which a medical attention is needed
 static constexpr double High_Threshold = 13.0;          //dtto above
@@ -58,7 +60,7 @@ struct Results {
 };
 
 
-void train_single_network(Neural_Network& neural_network, Results& results_struct, const std::vector<Training_Input>& training_set) {
+void train_single_network(Neural_Network& neural_network, Results& results_struct, const std::vector<Training_Input>& training_set, bool backprop) {
 	std::vector<double> relative_errors;
 	std::vector<double> results;
 	double relative_errors_sum = 0;
@@ -86,7 +88,9 @@ void train_single_network(Neural_Network& neural_network, Results& results_struc
 		expected_result_output[index] = 1;
 		relative_errors.push_back(relative_error);
 		neural_network.add_xai_intensity(relative_error);
-		//neural_network.back_propagation(expected_result_output);
+		if (backprop) {
+			neural_network.back_propagation(expected_result_output);
+		}
 	}
 
 
@@ -117,12 +121,12 @@ void process_relative_errors(std::vector<double> relative_errors) {
 
 	size_t step = relative_errors.size() / 100;
 
-	printf("Mean of relative errors is %f and standard deviation is %f\n", mean, std_dev);
-	printf("Printing cummulation function:\n");
-	for (size_t i = 0; i < relative_errors.size() - 1; i += step) {
-		printf("%f ", relative_errors[i]);
-	}
-	printf("%f\n", relative_errors.back());
+	std::cout << "Mean of relative errors is " << mean << " and standard deviation is " << std_dev << "." << std::endl << std::endl;
+	//printf("Printing cummulation function:\n");
+	//for (size_t i = 0; i < relative_errors.size() - 1; i += step) {
+	//	printf("%f ", relative_errors[i]);
+	//}
+	//printf("%f\n", relative_errors.back());
 }
 
 void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
@@ -132,7 +136,7 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Tra
 	auto start = std::chrono::high_resolution_clock::now();
 	std::for_each(std::execution::par, training.begin(), training.end(),
 		[&training_set](std::pair<Neural_Network, Results>& pair) {
-			train_single_network(pair.first, pair.second, training_set);
+			train_single_network(pair.first, pair.second, training_set, false);
 		}
 	);
 	auto stop = std::chrono::high_resolution_clock::now();
@@ -149,14 +153,14 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Tra
 	auto &relative_errors = results.relative_errors;
 	process_relative_errors(relative_errors);
 
-	const Neural_Network &neural_network = (*lowest_mean).first;
+	Neural_Network &neural_network = (*lowest_mean).first;
 	
 	neural_network.export_to_svg();
 	std::ofstream file("neural.ini");
 	if (file.is_open()) {
 		neural_network.print_neural_network(file);
+		std::cout << "Saved neural network weights into file neural.ini." << std::endl;
 	}
-	file.close();
 }
 
 
@@ -203,15 +207,90 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	process_relative_errors(relative_errors);
 }
 
-int main() {
-	double minutes_prediction = 30;
+
+void load_neural_network(const std::string& weights_file_name, const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set) {
+	Neural_Network nn(topology);
+	Results results;
+	std::ifstream file(weights_file_name);
+	if (file.is_open()) {
+		std::cout << std::endl << std::endl << "Loaded weights from  " << weights_file_name << ", running against the training set." << std::endl;
+		std::cout << "================================================================================" << std::endl;
+		nn.load_weights(file);
+
+		train_single_network(nn, results, training_set, false);
+		process_relative_errors(results.relative_errors);
+	}
+	else {
+		std::cout << "Invalid weights file name." << std::endl;
+	}
+
+}
+
+void print_help() {
+	std::cout << "Parallel programming semestral work by Hung Ngoc Hoang." << std::endl;
+	std::cout << "Usage: ./PPR MINUTES_PREDICTION SQLITE_DB_PATH [options]" << std::endl;
+	std::cout << "ARGS:" << std::endl;
+	std::cout << "\t<MINUTES_PREDICTION>\tnumber of minutes for prediction." << std::endl;
+	std::cout << "\t<SQLITE_DB_PATH>\tpath to database with ist values and dates." << std::endl;
+	std::cout << "OPTIONS:" << std::endl;
+	std::cout << "\t-s <NUM>\tset <NUM> of instances to train." << std::endl;
+	std::cout << "\t-t <WEIGHTS>\tload weights from <WEIGHTS> file path and run single neural network." << std::endl;
+	std::cout << "\t-opencl\t\trun the opencl version." << std::endl;
+	std::cout << "\t-pstl\t\trun the pstl version." << std::endl;
+	std::cout << "\t-both\t\trun opencl and pstl version." << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+	Input_Parser input_parser(argc, argv);
 	std::vector<Training_Input> training_set;
-	create_training_set("C:\\Users\\hungi\\Downloads\\asc2018.sqlite", Inner_Layer_Count, minutes_prediction, training_set);
-
-	std::cout << "Created training size: " << training_set.size() << " using risk function." << std::endl;
-
 	std::vector<size_t> topology{ 8, 16, 26, 32 };
-	size_t training_count = 100;
+	
+	if (input_parser.arguments_count() < 2) {
+		std::cout << input_parser.arguments_count() << std::endl;
+		print_help();
+		return 0;
+	}
+
+	size_t minutes;
+	std::stringstream sstream(input_parser.get_arg(0));
+	sstream >> minutes;
+	if (sstream.fail()) {
+		std::cout << "Invalid minutes prediction value." << std::endl;
+		print_help();
+		return 0;
+	}
+
+	std::cout << "Prediction is set to " << minutes << " minutes." << std::endl;
+	const std::string& db_name = input_parser.get_arg(1);
+	bool created = create_training_set(db_name, Inner_Layer_Count, minutes, training_set);
+	if (!created) {
+		print_help();
+		return 0;
+	}
+	std::cout << "Created training size: " << training_set.size() << " using risk function." << std::endl;
+	bool only_single_train = false;
+	if (input_parser.cmd_option_exists("-t")) {
+		const std::string& training_file_name = input_parser.get_cmd_option("-t");
+		std::cout << training_file_name << std::endl;
+		load_neural_network(training_file_name, topology, training_set);
+		only_single_train = true;
+	}
+
+	size_t training_count = 0;
+	if (input_parser.cmd_option_exists("-s")) {
+		sstream.clear();
+		sstream.str(input_parser.get_cmd_option("-s"));
+		sstream >> training_count;
+		if (sstream.fail()) {
+			std::cout << "Passed invalid number in -s flag." << std::endl;
+		}
+		else {
+			std::cout << "Number of neural networks instances set to " << training_count << "." << std::endl;
+		}
+	}
+	else {
+		training_count = 100;
+	}
 
 	std::vector<std::pair<Neural_Network, Results>> training;
 	for (size_t i = 0; i < training_count; i++) {
@@ -220,6 +299,19 @@ int main() {
 		training.push_back(std::make_pair(nn, results));
 	}
 
-	run_opencl_version(topology, training_set, training_count);
-	run_pstl_version(topology, training_set, training);
+	if (input_parser.cmd_option_exists("-pstl")) {
+		run_pstl_version(topology, training_set, training);
+		only_single_train = true;
+
+	}
+	if (input_parser.cmd_option_exists("-opencl")) {
+		run_opencl_version(topology, training_set, training_count);
+		only_single_train = true;
+	}
+
+	only_single_train = only_single_train || input_parser.cmd_option_exists("-both");
+	if (!only_single_train) {
+		run_opencl_version(topology, training_set, training_count);
+		run_pstl_version(topology, training_set, training);
+	}
 }
