@@ -8,7 +8,6 @@
 #include <sstream>
 
 #include "nnetwork.h"
-#include "sqlite/sqlite3.h"
 #include "opencl_neural_network.h"
 #include "training_set_utils.h"
 #include "parsing_utils.h"
@@ -106,7 +105,7 @@ void train_single_network(Neural_Network& neural_network, Results& results_struc
 }
 
 
-void process_relative_errors(std::vector<double> relative_errors) {
+void process_relative_errors(std::vector<double> relative_errors, bool save_to_csv) {
 	double sum = std::accumulate(relative_errors.begin(), relative_errors.end(), 0.0);
 	double mean = sum / relative_errors.size();
 
@@ -122,14 +121,24 @@ void process_relative_errors(std::vector<double> relative_errors) {
 	size_t step = relative_errors.size() / 100;
 
 	std::cout << "Mean of relative errors is " << mean << " and standard deviation is " << std_dev << "." << std::endl << std::endl;
-	//printf("Printing cummulation function:\n");
-	//for (size_t i = 0; i < relative_errors.size() - 1; i += step) {
-	//	printf("%f ", relative_errors[i]);
-	//}
-	//printf("%f\n", relative_errors.back());
+	if (save_to_csv) {
+		std::ofstream errors_csv("errors.csv");
+		if (errors_csv.is_open()) {
+			errors_csv << mean << "," << std_dev << ",";
+			for (size_t i = 0; i < relative_errors.size() - 1; i += step) {
+				errors_csv << relative_errors[i] << " ";
+			}
+			errors_csv << relative_errors.back() << std::endl;
+
+			std::cout << "Saved errors into file errors.csv." << std::endl;
+		}
+		else {
+			perror("Cannot write into file 'error.csv'");
+		}
+	}
 }
 
-void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
+void run_pstl_version(const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
 	std::cout << std::endl << std::endl << "Running PSTL algorithm with multiclass clasification for " << training.size() << " neural networks." << std::endl;
 	std::cout << "================================================================================" << std::endl;
 
@@ -149,9 +158,8 @@ void run_pstl_version(const std::vector<size_t>& topology, const std::vector<Tra
 	);
 
 	auto &results = (*lowest_mean).second;
-	auto mean = results.mean;
 	auto &relative_errors = results.relative_errors;
-	process_relative_errors(relative_errors);
+	process_relative_errors(relative_errors, true);
 
 	Neural_Network &neural_network = (*lowest_mean).first;
 	
@@ -172,7 +180,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	std::vector<cl::Device> devices;
 	platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
 	if (devices.size() == 0) {
-		perror("No GPU");
+		perror("No GPU\n");
 		return;
 	}
 	cl::Device gpu = devices.front();
@@ -184,11 +192,14 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	cl::Program program(context, sources);
 
 	auto err = program.build("-cl-std=CL1.2");
+	if (err != CL_SUCCESS) {
+		perror("Didnt build the opencl program\n");
+		return;
+	}
 	OpenCL_Data data(context, program, gpu);
 
 	OpenCLImpl::MultipleNeuralNetworks networks(data, topology, neural_network_count);
 
-	size_t counter = 0;
 	Neural_Network nn(topology);
 
 	std::cout << std::endl << std::endl << "Running OpenCL algorithm with multiclass clasification for " << neural_network_count << " neural networks." << std::endl;
@@ -204,7 +215,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	std::cout << "Duration for OpenCL in milliseconds: " << duration.count() << std::endl << std::endl;
 
 	auto relative_errors = networks.get_errors();
-	process_relative_errors(relative_errors);
+	process_relative_errors(relative_errors, false);
 }
 
 
@@ -218,7 +229,7 @@ void load_neural_network(const std::string& weights_file_name, const std::vector
 		nn.load_weights(file);
 
 		train_single_network(nn, results, training_set, false);
-		process_relative_errors(results.relative_errors);
+		process_relative_errors(results.relative_errors, false);
 	}
 	else {
 		std::cout << "Invalid weights file name." << std::endl;
@@ -271,7 +282,6 @@ int main(int argc, char* argv[]) {
 	bool only_single_train = false;
 	if (input_parser.cmd_option_exists("-t")) {
 		const std::string& training_file_name = input_parser.get_cmd_option("-t");
-		std::cout << training_file_name << std::endl;
 		load_neural_network(training_file_name, topology, training_set);
 		only_single_train = true;
 	}
@@ -300,18 +310,17 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (input_parser.cmd_option_exists("-pstl")) {
-		run_pstl_version(topology, training_set, training);
+		run_pstl_version(training_set, training);
 		only_single_train = true;
-
 	}
+
 	if (input_parser.cmd_option_exists("-opencl")) {
 		run_opencl_version(topology, training_set, training_count);
 		only_single_train = true;
 	}
 
-	only_single_train = only_single_train || input_parser.cmd_option_exists("-both");
-	if (!only_single_train) {
+	if (!only_single_train || input_parser.cmd_option_exists("-both")) {
 		run_opencl_version(topology, training_set, training_count);
-		run_pstl_version(topology, training_set, training);
+		run_pstl_version(training_set, training);
 	}
 }

@@ -19,6 +19,7 @@ void Neuron::update_input_weights(Layer& previous_layer) {
 		current.weights[index].weight += new_delta_weight;
 	}
 }
+
 double Neuron::sumDOW(const Layer& next_layer) const {
 	double sum = 0.0;
 
@@ -276,12 +277,12 @@ Neural_Network::Neural_Network(const std::vector<size_t>& topology) {
 		layers.back().back().set_output_signal(1.0); // bias node
 	}
 }
-void Neuron::set_weight(size_t index, double weight) {
-	if (index < weights.size()) {
-		weights[index].weight = weight;
+void Neuron::set_weight(size_t weight_index, double weight) {
+	if (weight_index < weights.size()) {
+		weights[weight_index].weight = weight;
 	}
 	else {
-		printf("Invalid index %zu\n", index);
+		printf("Invalid index %zu\n", weight_index);
 	}
 }
 
@@ -303,7 +304,7 @@ void Neural_Network::print_neural_network(std::ostream &file) const {
 
 void Neural_Network::load_weights(std::ifstream& file) {
 	std::string line;
-	size_t layer_index = -1;
+	int layer_index = -1;
 	
 	while (std::getline(file, line)) {
 		if (line.find("[hidden_layer_") != std::string::npos) {
@@ -333,8 +334,8 @@ void Neuron::add_xai_intensity() {
 	}
 }
 
-void Neural_Network::add_xai_intensity(double error) {
-	if (error <= 0.15) {
+void Neural_Network::add_xai_intensity(double error_val) {
+	if (error_val <= 0.15) {
 		for (size_t layer_index = 0; layer_index < layers.size(); layer_index++) {
 			Layer& layer = layers[layer_index];
 			for (size_t neuron_index = 0; neuron_index < layer.size(); neuron_index++) {

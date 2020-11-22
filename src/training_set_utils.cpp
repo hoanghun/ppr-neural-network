@@ -2,7 +2,9 @@
 #include <ctime>
 #include <string>
 
+#pragma warning(push, 0)    
 #include "sqlite/sqlite3.h"
+#pragma warning(pop)
 #include "training_set_utils.h"
 
 struct Measured_Value {
@@ -19,7 +21,7 @@ static int callback(void* data, int argc, char** argv, char** column_name) {
 	for (size_t i = 0; i < argc; i++) {
 		if (strcmp(column_name[i], "measuredat") == 0) {
 			std::tm timestamp = {};
-			int rc = sscanf_s(argv[i], "%d-%d-%dT%d:%d:%f+02:00", &y, &M, &d, &h, &m, &s);
+			sscanf_s(argv[i], "%d-%d-%dT%d:%d:%f+02:00", &y, &M, &d, &h, &m, &s);
 			timestamp.tm_year = y - 1900;
 			timestamp.tm_mday = d;
 			timestamp.tm_mon = M - 1;
