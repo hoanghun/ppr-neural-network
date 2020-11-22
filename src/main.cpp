@@ -308,7 +308,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	cl::Program program(context, sources);
 
 	auto err = program.build("-cl-std=CL1.2");
-	opencldata data(context, program, gpu);
+	OpenCL_Data data(context, program, gpu);
 
 	OpenCLImpl::MultipleNeuralNetworks networks(data, topology, neural_network_count);
 

@@ -5,9 +5,9 @@
 
 #include "opencl_neural_network.h"
 
-cl_int opencl_feed_forward(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer, cl::Buffer& previous_layer_weights, cl::Buffer& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size);
-cl_int opencl_feed_forward_sum_synapses(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer_synapses_output, cl::Buffer& layer_biases, cl::Buffer& layer_output, size_t previous_layer_size, size_t layer_size, size_t neural_network_count);
-cl_int opencl_calculate_errors(opencldata& opencl, cl::Buffer& output_layer, cl::Buffer& errors, size_t neural_network_count, size_t output_layer_size, cl_float measured_value);
+cl_int opencl_feed_forward(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer, cl::Buffer& previous_layer_weights, cl::Buffer& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size);
+cl_int opencl_feed_forward_sum_synapses(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer_synapses_output, cl::Buffer& layer_biases, cl::Buffer& layer_output, size_t previous_layer_size, size_t layer_size, size_t neural_network_count);
+cl_int opencl_calculate_errors(OpenCL_Data& opencl, cl::Buffer& output_layer, cl::Buffer& errors, size_t neural_network_count, size_t output_layer_size, cl_float measured_value);
 
 OpenCLImpl::Layer::Layer(std::uniform_real_distribution<>& distr, std::mt19937& gen, cl::Context& context, size_t neurons_count, size_t outputs_count, size_t neural_network_count) :
 	single_neural_network_neurons_count(neurons_count),
@@ -37,7 +37,7 @@ OpenCLImpl::Layer::Layer(std::uniform_real_distribution<>& distr, std::mt19937& 
 }
 
 
-OpenCLImpl::MultipleNeuralNetworks::MultipleNeuralNetworks(opencldata& data, const std::vector<size_t>& topology, size_t neural_networks_count)
+OpenCLImpl::MultipleNeuralNetworks::MultipleNeuralNetworks(OpenCL_Data& data, const std::vector<size_t>& topology, size_t neural_networks_count)
 	: neural_networks_count(neural_networks_count), errors(neural_networks_count), data(data), helper_error_vector(neural_networks_count) {
 
 	std::random_device rd;
@@ -80,7 +80,7 @@ std::vector<double> OpenCLImpl::MultipleNeuralNetworks::get_errors() {
 }
 
 
-void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>& input, double measured_value, opencldata& opencl) {
+void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>& input, double measured_value, OpenCL_Data& opencl) {
 	std::vector<cl_float>& first_layer_output = layers[0].output;
 	size_t first_layer_neurons_count = layers[0].single_neural_network_neurons_count;
 
@@ -140,7 +140,7 @@ void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>&
 }
 
 
-cl_int opencl_feed_forward(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer, cl::Buffer& previous_layer_weights, cl::Buffer& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size) {
+cl_int opencl_feed_forward(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer, cl::Buffer& previous_layer_weights, cl::Buffer& previous_layer_synapses_output, size_t neural_network_count, size_t layer_size, size_t previous_layer_size) {
 	cl::Context& context = opencl.context;
 	cl::Program& program = opencl.program;
 	cl::CommandQueue& queue = opencl.queue;
@@ -157,7 +157,7 @@ cl_int opencl_feed_forward(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& p
 }
 
 
-cl_int opencl_feed_forward_sum_synapses(opencldata& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer_synapses_output, cl::Buffer& layer_biases, cl::Buffer& layer_output,
+cl_int opencl_feed_forward_sum_synapses(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer_synapses_output, cl::Buffer& layer_biases, cl::Buffer& layer_output,
 	size_t previous_layer_size, size_t layer_size, size_t neural_network_count) {
 	cl::CommandQueue& queue = opencl.queue;
 
@@ -174,7 +174,7 @@ cl_int opencl_feed_forward_sum_synapses(opencldata& opencl, cl::Kernel& kernel, 
 
 
 
-cl_int opencl_calculate_errors(opencldata& opencl, cl::Buffer& output_layer, cl::Buffer& errors, size_t neural_network_count, size_t output_layer_size, cl_float measured_value) {
+cl_int opencl_calculate_errors(OpenCL_Data& opencl, cl::Buffer& output_layer, cl::Buffer& errors, size_t neural_network_count, size_t output_layer_size, cl_float measured_value) {
 	cl::Context& context = opencl.context;
 	cl::Program& program = opencl.program;
 	cl::CommandQueue& queue = opencl.queue;

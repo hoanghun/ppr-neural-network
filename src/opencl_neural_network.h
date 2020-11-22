@@ -4,12 +4,12 @@
 #include <CL/cl.hpp>
 #include <random>
 
-struct opencldata {
+struct OpenCL_Data {
 	cl::Context& context;
 	cl::Program& program;
 	cl::CommandQueue queue;
 
-	opencldata(cl::Context& context, cl::Program& program, cl::Device& device) : context(context), program(program), queue(context, device) {}
+	OpenCL_Data(cl::Context& context, cl::Program& program, cl::Device& device) : context(context), program(program), queue(context, device) {}
 };
 
 namespace OpenCLImpl {
@@ -34,12 +34,12 @@ namespace OpenCLImpl {
 
 	class MultipleNeuralNetworks {
 	public:
-		MultipleNeuralNetworks(opencldata& opencl, const std::vector<size_t>& topology, size_t neural_networks_count);
-		void feed_forward(const std::vector<double>& input, double measured_value, opencldata& opencl);
+		MultipleNeuralNetworks(OpenCL_Data& opencl, const std::vector<size_t>& topology, size_t neural_networks_count);
+		void feed_forward(const std::vector<double>& input, double measured_value, OpenCL_Data& opencl);
 		std::vector<double> get_errors();
 	private:
 		size_t neural_networks_count;
-		opencldata& data;
+		OpenCL_Data& data;
 		cl::Kernel feed_forward_kernel;
 		cl::Kernel sum_kernel;
 		cl::Kernel errors_kernel;
