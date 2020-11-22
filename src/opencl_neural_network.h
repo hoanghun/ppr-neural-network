@@ -34,8 +34,14 @@ namespace OpenCLImpl {
 
 	class MultipleNeuralNetworks {
 	public:
+		// Creates neural_networks_count instances of neural network. OpenCL_Data structure with valid program, context and queue has to be passed in.
+		// Every neural network created has topology of passed topology vector.
 		MultipleNeuralNetworks(OpenCL_Data& opencl, const std::vector<size_t>& topology, size_t neural_networks_count);
+
+		// Does one feed forward through the network. This is done for all instances of created neural networks.
 		void feed_forward(const std::vector<double>& input, double measured_value, OpenCL_Data& opencl);
+
+		// Returns relative errors of the best neural network instance.
 		std::vector<double> get_errors();
 	private:
 		size_t neural_networks_count;

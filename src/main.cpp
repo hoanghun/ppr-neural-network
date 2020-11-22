@@ -59,6 +59,8 @@ struct Results {
 };
 
 
+// Trains a single neural network against training set. Results are then saved into passed struct.
+// If backprop flag is true, then backprop algorithm is applied
 void train_single_network(Neural_Network& neural_network, Results& results_struct, const std::vector<Training_Input>& training_set, bool backprop) {
 	std::vector<double> relative_errors;
 	std::vector<double> results;
@@ -105,6 +107,8 @@ void train_single_network(Neural_Network& neural_network, Results& results_struc
 }
 
 
+// Calculates relative error mean and it's standard deviation.
+// If the flag save_to_csv is true, then relative errors are sampled into distribution function and saved into csv along with mean and sd.
 void process_relative_errors(std::vector<double> relative_errors, bool save_to_csv) {
 	double sum = std::accumulate(relative_errors.begin(), relative_errors.end(), 0.0);
 	double mean = sum / relative_errors.size();
@@ -138,6 +142,8 @@ void process_relative_errors(std::vector<double> relative_errors, bool save_to_c
 	}
 }
 
+// Runs PSTL version of parallel neural network implementation.
+// After the run find the best neural network and saves it's weight to neural.ini file and it's errors to errors.csv.
 void run_pstl_version(const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
 	std::cout << std::endl << std::endl << "Running PSTL algorithm with multiclass clasification for " << training.size() << " neural networks." << std::endl;
 	std::cout << "================================================================================" << std::endl;
@@ -172,6 +178,9 @@ void run_pstl_version(const std::vector<Training_Input>& training_set, std::vect
 }
 
 
+
+// Runs OpenCL implementation of parallel neural networks.
+// There has to be valid GPU device to run on.
 void run_opencl_version(const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set, size_t neural_network_count) {
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
@@ -185,8 +194,12 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 	}
 	cl::Device gpu = devices.front();
 
-	std::ifstream helloWorldFile("super.cl");
-	std::string src(std::istreambuf_iterator<char>(helloWorldFile), (std::istreambuf_iterator<char>()));
+	std::ifstream openCL_file("../src/neural_network.cl");
+	if (!openCL_file.is_open()) {
+		perror("Invalid open cl file\n");
+		return;
+	}
+	std::string src(std::istreambuf_iterator<char>(openCL_file), (std::istreambuf_iterator<char>()));
 	cl::Program::Sources sources(1, std::make_pair(src.c_str(), src.length() + 1));
 	cl::Context context(gpu);
 	cl::Program program(context, sources);
@@ -219,6 +232,8 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 }
 
 
+// Loads weights from a file and creates a neural network with these weights.
+// This neural network is then run against the training set.
 void load_neural_network(const std::string& weights_file_name, const std::vector<size_t>& topology, const std::vector<Training_Input>& training_set) {
 	Neural_Network nn(topology);
 	Results results;

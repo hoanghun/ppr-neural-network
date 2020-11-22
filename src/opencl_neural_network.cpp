@@ -131,7 +131,7 @@ void OpenCLImpl::MultipleNeuralNetworks::feed_forward(const std::vector<double>&
 	}
 }
 
-
+// Does a feed forward through one layer. Output of this operation is output value of every synapse leading from previous layer to next layer.
 cl_int opencl_feed_forward(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer, cl::Buffer& previous_layer_weights, cl::Buffer& previous_layer_synapses_output,
 	size_t neural_network_count, size_t layer_size, size_t previous_layer_size) {
 	cl::CommandQueue& queue = opencl.queue;
@@ -147,7 +147,8 @@ cl_int opencl_feed_forward(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& 
 	return error;
 }
 
-
+// Reduction operation. Synapses from previous layers are summed together to calculate outputs of neurons of next layer.
+// Tanh function is used.
 cl_int opencl_feed_forward_sum_synapses(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& previous_layer_synapses_output, cl::Buffer& layer_biases, cl::Buffer& layer_output,
 	size_t previous_layer_size, size_t layer_size, size_t neural_network_count) {
 	cl::CommandQueue& queue = opencl.queue;
@@ -164,7 +165,7 @@ cl_int opencl_feed_forward_sum_synapses(OpenCL_Data& opencl, cl::Kernel& kernel,
 }
 
 
-
+// Calculates error for every neural network instance.
 cl_int opencl_calculate_errors(OpenCL_Data& opencl, cl::Kernel& kernel, cl::Buffer& output_layer, cl::Buffer& errors, size_t neural_network_count, size_t output_layer_size, cl_float measured_value) {
 	cl::CommandQueue& queue = opencl.queue;
 
