@@ -288,7 +288,12 @@ void Neuron::set_weight(size_t weight_index, double weight) {
 
 void Neural_Network::print_neural_network(std::ostream &file) const {
 	for (size_t layer_index = 0; layer_index < layers.size() - 1; layer_index++) {
-		file << "[hidden_layer_" << layer_index + 1 << "]" << std::endl;
+		if (layer_index == layers.size() - 2) {
+			file << "[output_layer]" << std::endl;
+		}
+		else {
+			file << "[hidden_layer_" << layer_index + 1 << "]" << std::endl;
+		}
 
 		const Layer &layer = layers[layer_index];
 		for (size_t neuron_index = 0; neuron_index < layer.size(); neuron_index++) {
@@ -314,7 +319,7 @@ void Neural_Network::load_weights(std::ifstream& file) {
 	}
 
 	while (std::getline(file, line)) {
-		if (line.find(hidden_layer_string) != std::string::npos) {
+		if (line.find(hidden_layer_string) != std::string::npos || line.find("output_layer") != std::string::npos) {
 			layer_index++;
 		}
 		else {
