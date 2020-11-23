@@ -65,6 +65,7 @@ void train_single_network(Neural_Network& neural_network, Results& results_struc
 	std::vector<double> relative_errors;
 	std::vector<double> results;
 	double relative_errors_sum = 0;
+	results_struct.relative_errors.clear();
 
 	// initialization
 
@@ -142,11 +143,39 @@ void process_relative_errors(std::vector<double> relative_errors, bool save_to_c
 	}
 }
 
+
+// Runs serial version of neural network implementation.
+void run_serial_version(const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
+	std::cout << std::endl << std::endl << "Starting serial version algorithm with multiclass clasification for " << training.size() << " neural networks." << std::endl;
+	std::cout << "No backprop." << std::endl;
+	std::cout << "==========================================================================================" << std::endl;
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	for (auto& pair : training) {
+		train_single_network(pair.first, pair.second, training_set, false);
+	}
+
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+	std::cout << "Duration for serial version in milliseconds: " << duration.count() << std::endl;
+
+	auto lowest_mean = std::min_element(std::begin(training), std::end(training), [](const std::pair<Neural_Network, Results> &lhs, const std::pair<Neural_Network, Results> &rhs) {
+		return lhs.second.mean < rhs.second.mean;
+		}
+	);
+
+	auto &results = (*lowest_mean).second;
+	auto &relative_errors = results.relative_errors;
+	process_relative_errors(relative_errors, false);
+}
+
 // Runs PSTL version of parallel neural network implementation.
 // After the run find the best neural network and saves it's weight to neural.ini file and it's errors to errors.csv.
 void run_pstl_version(const std::vector<Training_Input>& training_set, std::vector<std::pair<Neural_Network, Results>> training) {
-	std::cout << std::endl << std::endl << "Running PSTL algorithm with multiclass clasification for " << training.size() << " neural networks." << std::endl;
-	std::cout << "================================================================================" << std::endl;
+	std::cout << std::endl << std::endl << "Starting PSTL version algorithm with multiclass clasification for " << training.size() << " neural networks." << std::endl;
+	std::cout << "No backprop." << std::endl;
+	std::cout << "==========================================================================================" << std::endl;
 
 	auto start = std::chrono::high_resolution_clock::now();
 	std::for_each(std::execution::par, training.begin(), training.end(),
@@ -156,7 +185,7 @@ void run_pstl_version(const std::vector<Training_Input>& training_set, std::vect
 	);
 	auto stop = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for Pstl in milliseconds: " << duration.count() << std::endl;
+	std::cout << "Duration for Pstl version in milliseconds: " << duration.count() << std::endl;
 
 	auto lowest_mean = std::min_element(std::begin(training), std::end(training), [](const std::pair<Neural_Network, Results> &lhs, const std::pair<Neural_Network, Results> &rhs) {
 		return lhs.second.mean < rhs.second.mean;
@@ -215,8 +244,9 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 
 	Neural_Network nn(topology);
 
-	std::cout << std::endl << std::endl << "Running OpenCL algorithm with multiclass clasification for " << neural_network_count << " neural networks." << std::endl;
-	std::cout << "================================================================================" << std::endl;
+	std::cout << std::endl << std::endl << "Starting OpenCL version algorithm with multiclass clasification for " << neural_network_count << " neural networks." << std::endl;
+	std::cout << "No backprop." << std::endl;
+	std::cout << "==========================================================================================" << std::endl;
 
 	auto start = std::chrono::high_resolution_clock::now();
 	for (auto const& sample : training_set) {
@@ -225,7 +255,7 @@ void run_opencl_version(const std::vector<size_t>& topology, const std::vector<T
 
 	auto stop = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-	std::cout << "Duration for OpenCL in milliseconds: " << duration.count() << std::endl << std::endl;
+	std::cout << "Duration for OpenCL version in milliseconds: " << duration.count() << std::endl << std::endl;
 
 	auto relative_errors = networks.get_errors();
 	process_relative_errors(relative_errors, false);
@@ -263,7 +293,8 @@ void print_help() {
 	std::cout << "\t-t <WEIGHTS>\tload weights from <WEIGHTS> file path and run single neural network." << std::endl;
 	std::cout << "\t-opencl\t\trun the opencl version." << std::endl;
 	std::cout << "\t-pstl\t\trun the pstl version." << std::endl;
-	std::cout << "\t-both\t\trun opencl and pstl version." << std::endl;
+	std::cout << "\t-all\t\trun opencl, pstl and serial version." << std::endl;
+	std::cout << "\t-serial\t\trun serial version." << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -324,6 +355,12 @@ int main(int argc, char* argv[]) {
 		training.push_back(std::make_pair(nn, results));
 	}
 
+
+	if (input_parser.cmd_option_exists("-serial")) {
+		run_serial_version(training_set, training);
+		only_single_train = true;
+	}
+
 	if (input_parser.cmd_option_exists("-pstl")) {
 		run_pstl_version(training_set, training);
 		only_single_train = true;
@@ -334,8 +371,9 @@ int main(int argc, char* argv[]) {
 		only_single_train = true;
 	}
 
-	if (!only_single_train || input_parser.cmd_option_exists("-both")) {
-		run_opencl_version(topology, training_set, training_count);
+	if (!only_single_train || input_parser.cmd_option_exists("-all")) {
+		run_serial_version(training_set, training);
 		run_pstl_version(training_set, training);
+		run_opencl_version(topology, training_set, training_count);
 	}
 }
