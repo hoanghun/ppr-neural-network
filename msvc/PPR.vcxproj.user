@@ -5,7 +5,7 @@
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <LocalDebuggerCommandArguments>60 ..\asc2018.sqlite -t neural.ini -s 100 -pstl -opencl</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>30 ..\asc2018.sqlite -s 100 -all</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -13,7 +13,7 @@
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>60 ..\asc2018.sqlite -t neural.ini -s 100 -pstl -opencl</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>30 ..\asc2018.sqlite -s 100 -all</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>

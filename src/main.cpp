@@ -197,8 +197,12 @@ void run_pstl_version(const std::vector<Training_Input>& training_set, std::vect
 	process_relative_errors(relative_errors, true);
 
 	Neural_Network &neural_network = (*lowest_mean).first;
-	
-	neural_network.export_to_svg();
+	std::ofstream out_intensity_file("normal_intensity.svg");
+	std::ofstream out_xai_intensity_file("xai_intensity.svg");
+	if (out_intensity_file.is_open() && out_xai_intensity_file.is_open()) {
+		neural_network.export_to_svg(out_intensity_file, out_xai_intensity_file);
+		std::cout << "Exported graphs into normal_intensity.svg and xai_intensity.svg." << std::endl;
+	}
 	std::ofstream file("neural.ini");
 	if (file.is_open()) {
 		neural_network.print_neural_network(file);
@@ -275,6 +279,12 @@ void load_neural_network(const std::string& weights_file_name, const std::vector
 
 		train_single_network(nn, results, training_set, false);
 		process_relative_errors(results.relative_errors, false);
+		std::ofstream out_intensity_file("loaded_nn_normal_intensity.svg");
+		std::ofstream out_xai_intensity_file("loaded_nn_xai_intensity.svg");
+		if (out_intensity_file.is_open() && out_xai_intensity_file.is_open()) {
+			nn.export_to_svg(out_intensity_file, out_xai_intensity_file);
+			std::cout << "Exported graphs into loaded_nn_normal_intensity.svg and loaded_nn_xai_intensity.svg." << std::endl;
+		}
 	}
 	else {
 		std::cout << "Invalid weights file name." << std::endl;
@@ -321,6 +331,7 @@ int main(int argc, char* argv[]) {
 	const std::string& db_name = input_parser.get_arg(1);
 	bool created = create_training_set(db_name, Inner_Layer_Count, minutes, training_set);
 	if (!created) {
+		std::cout << "You might have passed invalid prediction minute value. Unable to create training dataset" << std::endl;
 		print_help();
 		return 0;
 	}
@@ -356,17 +367,17 @@ int main(int argc, char* argv[]) {
 	}
 
 
-	if (input_parser.cmd_option_exists("-serial")) {
+	if (input_parser.cmd_option_exists("-serial") && !input_parser.cmd_option_exists("-all")) {
 		run_serial_version(training_set, training);
 		only_single_train = true;
 	}
 
-	if (input_parser.cmd_option_exists("-pstl")) {
+	if (input_parser.cmd_option_exists("-pstl") && !input_parser.cmd_option_exists("-all")) {
 		run_pstl_version(training_set, training);
 		only_single_train = true;
 	}
 
-	if (input_parser.cmd_option_exists("-opencl")) {
+	if (input_parser.cmd_option_exists("-opencl") && !input_parser.cmd_option_exists("-all") ) {
 		run_opencl_version(topology, training_set, training_count);
 		only_single_train = true;
 	}

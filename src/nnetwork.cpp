@@ -182,10 +182,8 @@ void Neural_Network::get_layer_edge_intensities(const Layer& layer, double& max_
 	min_xai_intensity = curr_min_xai_intensity;
 }
 
-void Neural_Network::export_to_svg() const {
+void Neural_Network::export_to_svg(std::ofstream& out_intensity_file, std::ofstream& out_xai_intensity_file) const {
 	std::ifstream svg_template("nn.svg");
-	std::ofstream out_intensity_file("normal_intensity.svg");
-	std::ofstream out_xai_intensity_file("xai_intensity.svg");
 
 	if (!svg_template.is_open() || !out_intensity_file.is_open() || !out_xai_intensity_file.is_open()) {
 		std::cout << "Could not open one of the files." << std::endl;
@@ -196,8 +194,6 @@ void Neural_Network::export_to_svg() const {
 
 	double max_intensity, max_xai_intensity;
 	double min_intensity, min_xai_intensity;
-
-
 
 	while (std::getline(svg_template, line)) {
 		if (line.find("<path class=") != std::string::npos) {

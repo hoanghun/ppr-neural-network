@@ -85,7 +85,7 @@ public:
 	// Loads neural network template from file nn.svg. If this file is malformed output is undefined and will most likely be unusable.
 	// Replaces the synapses colors with normalized values (0, 255).
 	// This normalization is done on every layer to ilustrate values passed in single layers.
-	void export_to_svg() const;
+	void export_to_svg(std::ofstream& out_intensity_file, std::ofstream& out_xai_intensity_file) const;
 private:
 	void get_layer_edge_intensities(const Layer& layer, double& max_intensity, double& max_xai_intensity, double& min_intensity, double& min_xai_intensity) const;
 	std::vector<Layer> layers;
