@@ -3,3 +3,8 @@ msvc/Debug/*
 msvc/x64/*
 .vs/
 msvc/neural.ini
+msvc/loaded_nn_normal_intensity.svg
+msvc/loaded_nn_xai_intensity.svg
+msvc/normal_intensity.svg
+msvc/xai_intensity.svg
+msvc/errors.csv
